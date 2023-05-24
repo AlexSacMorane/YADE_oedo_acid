@@ -336,7 +336,7 @@ def saveData_ic():
         ax2b = ax2.twinx()
         ax2b.plot(L_ite, L_confinement, 'r')
         ax2b.set_ylabel('Confinement (%)', color='r')
-        ax2b.set_ylim(ymin=0, ymax=200)
+        #ax2b.set_ylim(ymin=0, ymax=200)
         ax2b.set_title('Steady-state indices')
 
         ax3.plot(L_ite, L_porosity)
