@@ -106,8 +106,10 @@ upper_plate = O.bodies[-1]  # the last particles is the plate
 # define grain material
 O.materials.append(FrictMat(young = 70e9, poisson = 0.3, frictionAngle = 0.5, density = 2500))
 for i in range(n_grains):
+    # coarse
     if random.uniform(0,1) < number_ratio_coarse_total :
         radius = random.uniform(rMean_1*(1-rRelFuzz_1),rMean_1*(1+rRelFuzz_1))
+    # fine
     else :
         radius = random.uniform(rMean_2*(1-rRelFuzz_2),rMean_2*(1+rRelFuzz_2))
     center_x = random.uniform(0+radius/n_steps_ic, Dx-radius/n_steps_ic)
