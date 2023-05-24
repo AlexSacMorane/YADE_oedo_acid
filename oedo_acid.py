@@ -223,7 +223,7 @@ def checkUnbalanced_ir_load_ic():
     if O.forces.f(upper_plate.id)[2] < F_load:
         vtkExporter.exportSpheres()
         growParticles(1+expansion_load)
-        O.dt = .5 * PWaveTimeStep()
+        O.dt = factor_dt_crit * PWaveTimeStep()
         return
     elif 100*F_load < O.forces.f(upper_plate.id)[2]:
         vtkExporter.exportSpheres()
