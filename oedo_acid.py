@@ -61,6 +61,9 @@ n_step_focus = 15
 # step_max-1 dissolution steps as first step is with initial size
 step_max = 30
 
+# time step
+factor_dt_crit = 0.6
+
 # Report
 simulation_report_name = 'simulation_report.txt'
 simulation_report = open(simulation_report_name, 'w')
@@ -132,7 +135,7 @@ O.engines = [
         PyRunner(command='checkUnbalanced_ir_ic()', iterPeriod = 200, label='checker')
 ]
 # time step
-O.dt = .5 * PWaveTimeStep()
+O.dt = factor_dt_crit * PWaveTimeStep()
 # start simulation
 O.run()
 
@@ -161,7 +164,7 @@ def checkUnbalanced_ir_ic():
             if isinstance(b.shape, Sphere):
                 growParticle(b.id, int(O.tags['Step ic'])/n_steps_ic*L_r[i_L_r]/b.shape.radius)
                 i_L_r = i_L_r + 1
-        O.dt = .5 * PWaveTimeStep()
+        O.dt = factor_dt_crit * PWaveTimeStep()
         return
     # export vtk file
     vtkExporter.exportSpheres()
@@ -456,7 +459,7 @@ def dissolveGrains():
             else :
                 growParticle(b.id, max(b.shape.radius-dR_dissolved, 0)/b.shape.radius)
     # recompute the time step
-    O.dt = .5 * PWaveTimeStep()
+    O.dt = factor_dt_crit * PWaveTimeStep()
     # reload the sample
     checker.command = 'checkUnbalanced()'
 
