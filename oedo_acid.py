@@ -273,7 +273,7 @@ def checkUnbalanced_ir_load_ic():
     O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
     # start plotting the data now, it was not interesting before
     O.engines = O.engines + [PyRunner(command='addPlotData()', iterPeriod = 250, label='plotter')]
-    O.engines = O.engines + [PyRunner(command='saveData()', iterPeriod = 500, label='saver')]
+    O.engines = O.engines + [PyRunner(command='saveData()', iterPeriod = 1500, label='saver')]
     plot.reset()
     # label step
     O.tags['Current Step']='1'
