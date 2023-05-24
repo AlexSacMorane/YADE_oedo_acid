@@ -36,14 +36,12 @@ rRelFuzz_2 = .2
 number_ratio_coarse_total = 0.4
 rMean = number_ratio_coarse_total*rMean_1 + (1-number_ratio_coarse_total)*rMean_2
 
-# Sample
-porosity_target = 0.5
-
 # Box
+n_g_on_z = 20 # height / (2*Rmean)
 Dz_on_Dx = 0.7 # ratio Dz / Dxy
-Dx = rMean*(n_grains*4*math.pi/3/Dz_on_Dx/(1-porosity_target))**(1/3)
+Dz = n_g_on_z * 2*rMean
+Dx = Dz/Dz_on_Dx
 Dy = Dx
-Dz = Dz_on_Dx*Dx
 
 # IC
 n_steps_ic = 30
