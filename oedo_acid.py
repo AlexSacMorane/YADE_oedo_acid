@@ -147,6 +147,19 @@ def checkUnbalanced_ir_ic():
     '''
     Increase particle radius until a steady-state is found.
     '''
+    # check grains is in the box
+    L_to_erase = []
+    for b in O.bodies:
+        if isinstance(b.shape, Sphere):
+            if b.state.pos[0] < 0 or Dx < b.state.pos[0]: # x-axis
+                L_to_erase.append(b.id)
+            elif b.state.pos[1] < 0 or Dy < b.state.pos[1]: # y-axis
+                L_to_erase.append(b.id)
+            elif b.state.pos[2] < 0 or Dz < b.state.pos[2]: # z-axis
+                L_to_erase.append(b.id)
+    for id_to_erase in L_to_erase:
+        O.bodies.erase(id_to_erase)
+        print("Body",id_to_erase,'erased')
     global iter_0
 	# at the very start, unbalanced force can be low as there is only few contacts, but it does not mean the packing is stable
     if O.iter < iter_0 + 1000:
