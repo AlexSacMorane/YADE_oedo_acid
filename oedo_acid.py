@@ -424,45 +424,7 @@ def dissolveGrains():
     # export vtk file
     vtkExporter.exportSpheres()
     # save at the end
-    plot.saveDataTxt('data/Step_' + O.tags['Current Step'] + '.txt')
-    # post-proccess
-    L_sigma_x = []
-    L_sigma_z = []
-    L_confinement = []
-    L_coordination = []
-    L_unbalanced = []
-    L_vert_strain = []
-    file = 'data/Step_'+O.tags['Current Step']+'.txt'
-    data = np.genfromtxt(file, skip_header=1)
-    for i in range(len(data)):
-        L_sigma_x.append(abs(data[i][0]/(data[i][3]*Dy)))
-        L_sigma_z.append(abs(data[i][1]/(Dx*Dy)))
-        L_confinement.append(data[i][4])
-        L_coordination.append(data[i][5])
-        L_unbalanced.append(data[i][9])
-        L_vert_strain.append(data[i][10])
-
-    # plot
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
-
-    ax1.plot(L_sigma_x, label = r'$\sigma_x$')
-    ax1.plot(L_sigma_z, label = r'$\sigma_z$')
-    ax1.legend()
-
-    ax2.plot(L_unbalanced, 'b')
-    ax2.set_ylabel('Unbalanced', color='b')
-    ax2b = ax2.twinx()
-    ax2b.plot(L_confinement, 'r')
-    ax2b.set_ylabel('Confinement', color='r')
-
-    ax3.plot(L_vert_strain)
-    ax3.set_title(r'$\epsilon_v$')
-
-    ax4.plot(L_coordination)
-    ax4.set_title('Coordination number')
-
-    plt.savefig('plot/Step/Step_'+O.tags['Current Step']+'.png')
-    plt.close()
+    saveData()
 
     # contact Directions
     plotDirections(noShow=True, sphSph=True).savefig('plot/Contact_Orientation/Contact_Orientation_step_'+O.tags['Current Step']+'.png')
@@ -491,7 +453,7 @@ def stopLoad():
     # export the vtk file
     vtkExporter.exportSpheres()
     # save at the converged iteration
-    plot.saveDataTxt('data/Step_' + O.tags['Current Step'] + '.txt')
+    saveData()
     # characterize the last DEM step and the simulation
     tac = time.perf_counter()
     hours = (tac-tic)//(60*60)
@@ -633,7 +595,7 @@ def saveData():
         ax2b = ax2.twinx()
         ax2b.plot(L_ite, L_confinement, 'r')
         ax2b.set_ylabel('Confinement (%)', color='r')
-        ax2b.set_ylim(ymin=0, ymax=200)
+        #ax2b.set_ylim(ymin=0, ymax=200)
         ax2b.set_title('Steady-state indices')
 
         ax3.plot(L_ite, L_vert_strain)
