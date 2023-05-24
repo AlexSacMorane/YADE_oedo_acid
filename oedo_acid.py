@@ -22,18 +22,18 @@ import shutil
 # PSD
 n_grains = 9000
 L_r = []
-size_ratio_coarse_fine = 4
+size_ratio_coarse_fine = 3
 
 # Coarse particles
 rMean_1 = 0.001  # m
-rRelFuzz_1 = .3
+rRelFuzz_1 = .2
 
 # Fines
 rMean_2 = rMean_1/size_ratio_coarse_fine  # m
-rRelFuzz_2 = .3
+rRelFuzz_2 = .2
 
 # Coarse-Fine distribution
-number_ratio_coarse_total = 1
+number_ratio_coarse_total = 0.4
 rMean = number_ratio_coarse_total*rMean_1 + (1-number_ratio_coarse_total)*rMean_2
 
 # Sample
@@ -46,8 +46,8 @@ Dy = Dx
 Dz = Dz_on_Dx*Dx
 
 # IC
-n_steps_ic = 15
-counter_checked_target = 5
+n_steps_ic = 30
+counter_checked_target = 2
 counter_checked = 0
 expansion_load = 3*1e-4
 
@@ -57,7 +57,7 @@ F_load = P_load*Dx*Dy # N
 kp = 1e-10 # m.N-1
 
 # Dissolution
-dR_dissolved = 0.005*rMean
+dR_dissolved = 0.003*rMean
 dR_dissolved_focus = dR_dissolved/3
 n_step_focus = 15
 # step_max-1 dissolution steps as first step is with initial size
