@@ -259,7 +259,7 @@ def checkUnbalanced_ir_load_ic():
     #report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
-    simulation_report.write('Porosity = '+str(porosity())+'/'+str(porosity_target)+' (target)\n')
+    simulation_report.write('Porosity = '+str(porosity())+'\n')
     simulation_report.write('Force applied = '+str(int(O.forces.f(upper_plate.id)[2]))+'/'+str(F_load)+' N (target)\n')
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
