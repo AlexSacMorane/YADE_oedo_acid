@@ -201,7 +201,7 @@ def checkUnbalanced_ir_ic():
     #report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("IC Generated : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
-    simulation_report.write('Porosity = '+str(round(porosity(),2))+'/'+str(porosity_target)+' (target)\n')
+    simulation_report.write('Porosity = '+str(round(porosity(),2))+'\n')
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
     print("IC Generated : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds")
