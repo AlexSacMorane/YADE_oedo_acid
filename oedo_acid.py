@@ -12,8 +12,6 @@ import math
 import random
 import pickle
 from pathlib import Path
-import os
-import shutil
 
 #-------------------------------------------------------------------------------
 #User
