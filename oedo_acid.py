@@ -543,6 +543,7 @@ def saveData():
     """
     Save data in .txt file during the steps.
     """
+    addPlotData()
     plot.saveDataTxt('data/Step_' + O.tags['Current Step'] + '.txt')
     # post-proccess
     L_sigma_x = []
