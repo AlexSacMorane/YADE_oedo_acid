@@ -266,11 +266,11 @@ def checkUnbalanced_ir_load_ic():
     O.save('save/simu_ic_load.yade.bz2')
     # next time, do not call this function anymore, but the next one instead
     checker.command = 'checkUnbalanced()'
-    checker.iterPeriod = 200
+    checker.iterPeriod = 250
 	# control top wall
     O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
     # start plotting the data now, it was not interesting before
-    O.engines = O.engines + [PyRunner(command='addPlotData()', iterPeriod = 250, label='plotter')]
+    O.engines = O.engines + [PyRunner(command='addPlotData()', iterPeriod = 500, label='plotter')]
     O.engines = O.engines + [PyRunner(command='saveData()', iterPeriod = 1500, label='saver')]
     plot.reset()
     # label step
