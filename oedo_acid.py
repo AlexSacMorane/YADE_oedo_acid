@@ -465,7 +465,7 @@ def stopLoad():
     L_coordination = []
     L_porosity = []
     L_vert_strain = []
-    for ite in range(1,step_max+1):
+    for ite in range(1,int(O.tags['Current Step'])+1):
         file = 'data/Step_'+str(ite)+'.txt'
         data = np.genfromtxt(file, skip_header=1)
         L_k0.append(data[-1][7])
