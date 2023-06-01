@@ -42,22 +42,22 @@ Dx = Dz/Dz_on_Dx
 Dy = Dx
 
 # IC
-n_steps_ic = 30
+n_steps_ic = 40
 counter_checked_target = 2
 counter_checked = 0
 expansion_load = 3*1e-4
 
 # Top wall
-P_load = 1e5 # Pa
+P_load = 0.5*1e5 # Pa
 F_load = P_load*Dx*Dy # N
 kp = 1e-10 # m.N-1
 
 # Dissolution
-dR_dissolved = 0.003*rMean
-dR_dissolved_focus = dR_dissolved/3
+dR_dissolved = 0.004*rMean
+dR_dissolved_focus = dR_dissolved/2.5
 n_step_focus = 15
 # step_max-1 dissolution steps as first step is with initial size
-step_max = 30
+step_max = 50
 
 # time step
 factor_dt_crit = 0.6
