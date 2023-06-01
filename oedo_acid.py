@@ -439,7 +439,8 @@ def stopLoad():
     vtkExporter.exportSpheres()
     # save at the converged iteration
     saveData()
-    # characterize the last DEM step and the simulation
+    # characterize the dem step
+    global tic
     tac = time.perf_counter()
     hours = (tac-tic)//(60*60)
     minutes = (tac-tic -hours*60*60)//(60)
@@ -449,6 +450,7 @@ def stopLoad():
     simulation_report.write("End of step "+O.tags['Current Step']+" : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.close()
     print("End of step "+O.tags['Current Step']+" : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds")
+    # characterize the last DEM step and the simulation
     hours = (tac-tic_0)//(60*60)
     minutes = (tac-tic_0 -hours*60*60)//(60)
     seconds = int(tac-tic_0 -hours*60*60 -minutes*60)
