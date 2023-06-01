@@ -377,7 +377,7 @@ def checkUnbalanced():
     """
     global iter_0
     # infinite iterations not allowed
-    if O.iter > iter_0+3000000:
+    if O.iter > iter_0+1000000:
         #report
         simulation_report = open(simulation_report_name, 'a')
         simulation_report.write('\nSteady state not found')
@@ -394,19 +394,6 @@ def checkUnbalanced():
 	# check unbalanced
     if unbalancedForce() > .005:
         return
-    # characterize the dem step
-    iter_0 = O.iter
-    global tic
-    tac = time.perf_counter()
-    hours = (tac-tic)//(60*60)
-    minutes = (tac-tic -hours*60*60)//(60)
-    seconds = int(tac-tic -hours*60*60 -minutes*60)
-    #report
-    simulation_report = open(simulation_report_name, 'a')
-    simulation_report.write("End of step "+O.tags['Current Step']+" : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
-    simulation_report.close()
-    print("End of step "+O.tags['Current Step']+" : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds")
-    tic = tac
 	# next time, do not call this function anymore, but the next one instead
     if int(O.tags['Current Step']) < step_max:
         checker.command = 'dissolveGrains()'
