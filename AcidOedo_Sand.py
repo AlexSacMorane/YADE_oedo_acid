@@ -41,16 +41,16 @@ kp = 1e-9 # m.N-1
 
 # Dissolution
 f_diss = 0.25 # part dissolved
-f_dR_diss = 2*1e-5
+f_dR_diss = 5e-4
 dR_dissolved = f_dR_diss*rMean
-step_max = rMean/dR_dissolved*0.15
+step_max = rMean/dR_dissolved*0.5
 f_plot_psd = int(rMean/dR_dissolved*0.01)
 
 # time step
 factor_dt_crit = 0.6
 
 # steady-state detection
-unbalancedForce_criteria = 0.003
+unbalancedForce_criteria = 0.015
 
 # Report
 simulation_report_name = O.tags['d.id']+'_report.txt'
@@ -93,7 +93,7 @@ O.bodies.append(wall(Dz, axis=2, sense=0)) # +z
 upper_plate = O.bodies[-1]  # the last body is the upper plate
 
 # define grain material
-O.materials.append(FrictMat(young = 7.54e9, poisson = 0.3, frictionAngle = atan(0.05), density = 2500))
+O.materials.append(FrictMat(young = 7.54e9, poisson = 0.3, frictionAngle = atan(0.5), density = 2500))
 L_id_diss = []
 for i in range(n_grains):
     radius = random.uniform(rMean*(1-rRelFuzz),rMean*(1+rRelFuzz))
@@ -193,11 +193,6 @@ def checkUnbalanced_ir_ic():
     checker.iterPeriod = 500
     # control top wall
     O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
-    # switch on friction between particle
-    O.materials[-1].frictionAngle = atan(0.5)
-    # for existing contacts, set contact friction directly
-    for i in O.interactions :
-        i.phys.tangensOfFrictionAngle = tan(atan(0.5))
     # switch on the gravity
     Newton.gravity = [0, 0, -9.81]
 
@@ -233,6 +228,11 @@ def checkUnbalanced_ir_load_ic():
     checker.command = 'checkUnbalanced()'
     checker.iterPeriod = 50
     plot.reset()
+    # switch on friction between particle
+    O.materials[-1].frictionAngle = atan(0.5)
+    # for existing contacts, set contact friction directly
+    for i in O.interactions :
+        i.phys.tangensOfFrictionAngle = tan(atan(0.5))
     # switch off damping
     Newton.damping = 0
     # save new reference position for upper wall
@@ -240,8 +240,10 @@ def checkUnbalanced_ir_load_ic():
     # label step
     O.tags['Current Step']='0'
     # track unbalanced
-    global L_unbalanced_ite
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite
     L_unbalanced_ite = []
+    L_k0_ite = []
+    L_confinement_ite = []
     # save
     O.save('save/'+O.tags['d.id']+'_ic.yade.bz2')
 
@@ -357,16 +359,33 @@ def checkUnbalanced():
     Look for the steady state during the loading phase.
     """
     # track and plot unbalanced
-    global L_unbalanced_ite
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite
     L_unbalanced_ite.append(unbalancedForce())
+    if O.forces.f(upper_plate.id)[2] != 0:
+        k0 = abs(O.forces.f(lateral_plate.id)[0]/(upper_plate.state.pos[2]*Dy)*(Dx*Dy)/O.forces.f(upper_plate.id)[2])
+    else :
+        k0 = 0
+    L_k0_ite.append(k0)
+    L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/F_load*100)
 
-    plt.figure(1,figsize=(16,9))
-    plt.plot(L_unbalanced_ite)
-    plt.savefig('plot/track_unbalanced.png')
+    fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
+
+    ax1.plot(L_unbalanced_ite)
+    ax1.set_title('unbalanced force (-)')
+
+    ax2.plot(L_k0_ite)
+    ax2.set_title(r'$k_0$ (-)')
+
+    ax3.plot(L_confinement_ite)
+    ax3.set_title('confinement (%)')
+
+    fig.savefig('plot/tracking_ite.png')
     plt.close()
 
     if unbalancedForce() < unbalancedForce_criteria :
         L_unbalanced_ite = []
+        L_k0_ite = []
+        L_confinement_ite = []
 
         # track the psd
         if int(O.tags['Current Step']) % f_plot_psd == 0 :
