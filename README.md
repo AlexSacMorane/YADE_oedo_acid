@@ -9,3 +9,5 @@ Different files.
     Try to reproduce and understand Cha & Santamarina 2014
 - AcidOedo_Sand.py
     Investigate oedometer test under acid injection
+- AcidOedo_Rock.py
+    Investigate oedometer test under acid injection with cohesive grains
