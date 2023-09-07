@@ -35,22 +35,29 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
+P_cementation = 1e3 # Pa
+F_cementation = P_cementation*Dx*Dy # N
 P_load = 1e5 # Pa
 F_load = P_load*Dx*Dy # N
 kp = 5e-9 # m.N-1
 
+# cementation
+f_cemented = 1. # -
+m_log = 8.77 # -
+s_log = 0.73 # -
+tensileCohesion = 2.75e6 # Pa
+shearCohesion = 6.6e6 # Pa
+
 # Dissolution
-f_diss = 0.25 # part dissolved
-f_dR_diss = 5e-5
-dR_dissolved = f_dR_diss*rMean
-step_max = rMean/dR_dissolved*0.5
-f_plot_psd = int(rMean/dR_dissolved*0.05)
+f_Sc_diss = 5e-3
+dSc_dissolved = f_Sc_diss*np.exp(m_log)*1e-12
+f_n_bond_stop = 0.1
 
 # time step
 factor_dt_crit = 0.6
 
 # steady-state detection
-unbalancedForce_criteria = 0.0015
+unbalancedForce_criteria = 0.01
 
 # Report
 simulation_report_name = O.tags['d.id']+'_report.txt'
@@ -89,8 +96,15 @@ lateral_plate = O.bodies[0]
 upper_plate = O.bodies[-1]
 
 # define grain material
-O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=atan(0.05), density=2650, isCohesive=False, momentRotationLaw=True, alphaKr=0.5, alphaKtw=0.5))
-L_id_diss = []
+O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+                               isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
+                               momentRotationLaw=True, alphaKr=0, alphaKtw=0))
+# frictionAngle, alphaKr, alphaKtw are set to 0 during IC. The real value is set after IC.
+frictionAngleReal = radians(20)
+alphaKrReal = 0.5
+alphaKtwReal = 0.5
+
+# generate grain
 for i in range(n_grains):
     radius = random.uniform(rMean*(1-rRelFuzz),rMean*(1+rRelFuzz))
     center_x = random.uniform(0+radius/n_steps_ic, Dx-radius/n_steps_ic)
@@ -99,9 +113,6 @@ for i in range(n_grains):
     O.bodies.append(sphere(center=[center_x, center_y, center_z], radius=radius/n_steps_ic))
     # can use b.state.blockedDOFs = 'xyzXYZ' to block translation of rotation of a body
     L_r.append(radius)
-    # determine if the grain is dissolvable
-    if random.uniform(0,1) < f_diss :
-        L_id_diss.append(O.bodies[-1].id)
 O.tags['Step ic'] = '1'
 
 # yade algorithm
@@ -188,18 +199,38 @@ def checkUnbalanced_ir_ic():
     checker.command = 'checkUnbalanced_ir_load_ic()'
     checker.iterPeriod = 500
     # control top wall
-    O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
+    O.engines = O.engines + [PyRunner(command='controlTopWall_ic()', iterPeriod = 1)]
     # switch on the gravity
     Newton.gravity = [0, 0, -9.81]
 
 #-------------------------------------------------------------------------------
 
+def controlTopWall_ic():
+    '''
+    Control the upper wall to applied a defined confinement force.
+
+    The displacement of the wall depends on the force difference. A maximum value is defined.
+    '''
+    Fz = O.forces.f(upper_plate.id)[2]
+    if Fz == 0:
+        upper_plate.state.pos =  (Dx/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
+    else :
+        dF = Fz - F_cementation
+        v_plate_max = rMean*0.0002/O.dt
+        v_try_abs = abs(kp*dF)/O.dt
+        # maximal speed is applied to top wall
+        if v_try_abs < v_plate_max :
+            upper_plate.state.vel = (0, 0, np.sign(dF)*v_try_abs)
+        else :
+            upper_plate.state.vel = (0, 0, np.sign(dF)*v_plate_max)
+
+#-------------------------------------------------------------------------------
+
 def checkUnbalanced_ir_load_ic():
-    global kp
     addPlotData_ic()
     saveData_ic()
     # check the force applied
-    if abs(O.forces.f(upper_plate.id)[2]-F_load)/F_load > 0.01:
+    if abs(O.forces.f(upper_plate.id)[2]-F_cementation)/F_cementation > 0.01:
         return
     if unbalancedForce() > unbalancedForce_criteria :
         return
@@ -220,28 +251,63 @@ def checkUnbalanced_ir_load_ic():
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
     print("Pressure applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds")
-    # next time, do not call this function anymore, but the next one instead
-    checker.command = 'checkUnbalanced()'
-    checker.iterPeriod = 50
-    plot.reset()
-    # switch on friction between particle
-    O.materials[-1].frictionAngle = radians(20)
-    # for existing contacts, set contact friction directly
-    for i in O.interactions :
-        i.phys.tangensOfFrictionAngle = tan(radians(20))
+    # switch on friction, rolling resistance and twisting resistance between particles
+    O.materials[-1].frictionAngle = frictionAngleReal
+    O.materials[-1].alphaKr = alphaKrReal
+    O.materials[-1].alphaKtw = alphaKtwReal
+    # for existing contacts, clear them
+    O.interactions.clear()
+    # calm down particle
+    for b in O.bodies:
+        if isinstance(b.shape,Sphere):
+            b.state.angVel = Vector3(0,0,0)
+            b.state.vel = Vector3(0,0,0)
     # switch off damping
     Newton.damping = 0
+    # next time, do not call this function anymore, but the next one instead
+    checker.command = 'checkUnbalanced_ir_load_param_ic()'
+
+#-------------------------------------------------------------------------------
+
+def checkUnbalanced_ir_load_param_ic():
+    addPlotData_ic()
+    saveData_ic()
+    # check the force applied
+    if abs(O.forces.f(upper_plate.id)[2]-F_cementation)/F_cementation > 0.01:
+        return
+    if unbalancedForce() > unbalancedForce_criteria :
+        return
+    # characterize the ic algorithm
+    global iter_0
+    iter_0 = O.iter
+    global tic
+    tac = time.perf_counter()
+    hours = (tac-tic)//(60*60)
+    minutes = (tac-tic -hours*60*60)//(60)
+    seconds = int(tac-tic -hours*60*60 -minutes*60)
+    tic = tac
+    #report
+    simulation_report = open(simulation_report_name, 'a')
+    simulation_report.write("Parameters applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
+    simulation_report.close()
+    print("Parameters applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds")
+    # reset plot (IC done, simulation starts)
+    plot.reset()
     # save new reference position for upper wall
     upper_plate.state.refPos = upper_plate.state.pos
     # label step
     O.tags['Current Step']='0'
     # track unbalanced
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
     L_unbalanced_ite = []
     L_k0_ite = []
     L_confinement_ite = []
+    L_count_bond = []
     # save
     O.save('save/'+O.tags['d.id']+'_ic.yade.bz2')
+    # next time, do not call this function anymore, but the next one instead
+    checker.command = 'cementation()'
+    checker.iterPeriod = 10
 
 #-------------------------------------------------------------------------------
 
@@ -325,6 +391,59 @@ def saveData_ic():
 
         plt.close()
 
+#------------------------------------------------------------------------------
+
+def pdf_lognormal(x,m_log,s_log):
+    '''
+    Return the probability of a value x with a log normal function defined by the mean m_log and the variance s_log.
+    '''
+    p = np.exp(-(np.log(x)-m_log)**2/(2*s_log**2))/(x*s_log*np.sqrt(2*np.pi))
+    return p
+
+#-------------------------------------------------------------------------------
+
+def cementation():
+    '''
+    Generate cementation between grains.
+    '''
+    # generate the list of cohesive surface area and its list of weight
+    x_min = 1e2 # µm2
+    x_max = 4e4 # µm2
+    n_x = 20000
+    x_L = np.linspace(x_min, x_max, n_x)
+    p_x_L = []
+    for x in x_L :
+        p_x_L.append(pdf_lognormal(x,m_log,s_log))
+    # counter
+    global counter_bond, counter_bond0
+    counter_bond = 0
+    # iterate on interactions
+    for i in O.interactions:
+        # only grain-grain contact can be cemented
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere) :
+            # only a fraction of the contact is cemented
+            if random.uniform(0,1) < f_cemented :
+                counter_bond = counter_bond + 1
+                # creation of cohesion
+                i.phys.cohesionBroken = False
+                # determine the cohesive surface
+                cohesiveSurface = random.choices(x_L,p_x_L)[0]*1e-12 # µm2
+                # set normal and shear adhesions
+                i.phys.normalAdhesion = tensileCohesion*cohesiveSurface
+                i.phys.shearAdhesion = shearCohesion*cohesiveSurface
+    counter_bond0 = counter_bond
+    # write in the report
+    simulation_report = open(simulation_report_name, 'a')
+    simulation_report.write(str(counter_bond)+" contacts cemented\n")
+    simulation_report.close()
+    print(str(counter_bond)+" contacts cemented")
+
+    # next time, do not call this function anymore, but the next one instead
+    checker.command = 'checkUnbalanced()'
+    checker.iterPeriod = 500
+    O.engines = O.engines[:-1]
+    O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
+
 #-------------------------------------------------------------------------------
 #Load
 #-------------------------------------------------------------------------------
@@ -350,12 +469,25 @@ def controlTopWall():
 
 #-------------------------------------------------------------------------------
 
+def count_bond():
+    '''
+    Count the bond
+    '''
+    counter_bond = 0
+    for i in O.interactions:
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere):
+            if not i.phys.cohesionBroken :
+                counter_bond = counter_bond + 1
+    return counter_bond
+
+#-------------------------------------------------------------------------------
+
 def checkUnbalanced():
     """
     Look for the steady state during the loading phase.
     """
     # track and plot unbalanced
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
     L_unbalanced_ite.append(unbalancedForce())
     if O.forces.f(upper_plate.id)[2] != 0:
         k0 = abs(O.forces.f(lateral_plate.id)[0]/(upper_plate.state.pos[2]*Dy)*(Dx*Dy)/O.forces.f(upper_plate.id)[2])
@@ -363,8 +495,9 @@ def checkUnbalanced():
         k0 = 0
     L_k0_ite.append(k0)
     L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/F_load*100)
+    L_count_bond.append(count_bond())
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
 
     ax1.plot(L_unbalanced_ite)
     ax1.set_title('unbalanced force (-)')
@@ -374,6 +507,9 @@ def checkUnbalanced():
 
     ax3.plot(L_confinement_ite)
     ax3.set_title('confinement (%)')
+
+    ax4.plot(L_count_bond)
+    ax4.set_title('Number of bond (-)')
 
     fig.savefig('plot/tracking_ite.png')
     plt.close()
@@ -396,35 +532,40 @@ def checkUnbalanced():
         L_unbalanced_ite = []
         L_k0_ite = []
         L_confinement_ite = []
+        L_count_bond = []
 
-        # track the psd
-        if int(O.tags['Current Step']) % f_plot_psd == 0 :
-            global L_L_psd_binsSizes, L_L_psd_binsProc
-            binsSizes, binsProc, binsSumCum = psd(bins=10)
-            L_L_psd_binsSizes.append(binsSizes)
-            L_L_psd_binsProc.append(binsProc)
-            plotPSD()
-
-        if int(O.tags['Current Step']) < step_max:
-            dissolveGrains()
+        if counter_bond0*f_n_bond_stop < counter_bond:
+            dissolve()
         else :
             stopLoad()
 
 #-------------------------------------------------------------------------------
 
-def dissolveGrains():
+def dissolve():
     """
-    Dissolve grain with a constant radius reduction.
+    Dissolve bond with a constant surface reduction.
     """
     # save at the end
     saveData()
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
-    # dissolution with a multiplier factor
-    for b in O.bodies :
-        if isinstance(b.shape, Sphere) and b.id in L_id_diss:
-            growParticle(b.id, max(b.shape.radius-dR_dissolved, 0)/b.shape.radius)
-    # recompute the time step
-    O.dt = factor_dt_crit * PWaveTimeStep()
+    # count the number of bond
+    global counter_bond
+    counter_bond = 0
+    # iterate on interactions
+    for i in O.interactions:
+        # only grain-grain contact can be cemented
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere) :
+            if not i.phys.cohesionBroken :
+                counter_bond = counter_bond + 1
+                # set normal and shear adhesions
+                i.phys.normalAdhesion = i.phys.normalAdhesion - tensileCohesion*dSc_dissolved
+                i.phys.shearAdhesion = i.phys.shearAdhesion - shearCohesion*dSc_dissolved
+                if i.phys.normalAdhesion <= 0 or i.phys.shearAdhesion <=0 :
+                    # bond brokes
+                    counter_bond = counter_bond - 1
+                    i.phys.cohesionBroken = True
+                    i.phys.normalAdhesion = 0
+                    i.phys.shearAdhesion = 0
 
 #-------------------------------------------------------------------------------
 
@@ -480,10 +621,10 @@ def addPlotData():
     # compute mass of the sample
     Mass_total = 0
     for b in O.bodies :
-        if isinstance(b.shape, Sphere) and b.id in L_id_diss:
+        if isinstance(b.shape, Sphere) :
             Mass_total = Mass_total + b.state.mass
     # add data
-    plot.addData(i=O.iter, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
+    plot.addData(i=O.iter, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(), counter_bond=counter_bond,\
                  Fx=Fx, Fz=Fz, Z_plate=upper_plate.state.pos[2], conf_verified=Fz/F_load*100, k0=k0, Mass_total=Mass_total,\
                  w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
 
@@ -505,6 +646,7 @@ def saveData():
     L_mass = []
     L_mass_diss = []
     L_ite  = []
+    L_counter_bond = []
     file = 'data/'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -512,36 +654,37 @@ def saveData():
     file_read.close()
     if len(lines) >= 3:
         for i in range(len(data)):
-            L_k0.append(data[i][7])
-            L_confinement.append(data[i][4])
-            L_unbalanced.append(data[i][9])
-            L_coordination.append(data[i][5])
-            L_vert_strain.append(data[i][10])
-            L_porosity.append(data[i][8])
             L_mass.append(data[i][2])
+            L_confinement.append(data[i][4])
+            L_coordination.append(data[i][5])
+            L_counter_bond.append(data[i][6])
+            L_ite.append(data[i][7]-iter_0)
+            L_k0.append(data[i][8])
+            L_porosity.append(data[i][9])
+            L_unbalanced.append(data[i][10])
+            L_vert_strain.append(data[i][11])
             L_mass_diss.append(100*(L_mass[0]-L_mass[-1])/L_mass[0])
-            L_ite.append(data[i][6]-iter_0)
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(16,9),num=1)
 
-        ax1.plot(L_mass_diss, L_k0)
-        ax1.set_title(r'$k_0$ (-) - mass dissolved (%)')
+        ax1.plot(L_k0)
+        ax1.set_title(r'$k_0$ (-) - step (-)')
 
-        ax2.plot(L_mass_diss, L_unbalanced)
-        ax2.set_title('Unbalanced (-) - mass dissolved (%)')
+        ax2.plot(L_counter_bond)
+        ax2.set_title('Number of bond (-) - step (-)')
 
-        ax3.plot(L_mass_diss, L_confinement)
-        ax3.set_title('Confinement (%) - mass dissolved (%)')
+        ax3.plot(L_confinement)
+        ax3.set_title('Confinement (%) - step (-)')
 
-        ax4.plot(L_mass_diss, L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%) - mass dissolved (%)')
+        ax4.plot(L_vert_strain)
+        ax4.set_title(r'$\epsilon_v$ (%) - step (-)')
 
-        ax5.plot(L_mass_diss, L_porosity)
-        ax5.set_title('Porosity (-) - mass dissolved (%)')
+        ax5.plot(L_porosity)
+        ax5.set_title('Porosity (-) - step (-)')
 
-        ax6.plot(L_mass_diss, L_coordination)
-        ax6.set_title('Coordination (-) - mass dissolved (%)')
+        ax6.plot(L_coordination)
+        ax6.set_title('Coordination (-) - step (-)')
 
         plt.savefig('plot/'+O.tags['d.id']+'.png')
         plt.close()
