@@ -42,6 +42,11 @@ F_load = P_load*Dx*Dy # N
 kp = 5e-9 # m.N-1
 
 # cementation
+# 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
+# 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
+# 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
+# 13BT : E ( 860MPa), f_cemented (1.00), m_log (8.44), s_log (0.92)
+# 13MB : E (1000MPa), f_cemented (1.00), m_log (8.77), s_log (0.73)
 f_cemented = 1. # -
 m_log = 8.77 # -
 s_log = 0.73 # -
@@ -51,7 +56,7 @@ shearCohesion = 6.6e6 # Pa
 # Dissolution
 f_Sc_diss = 5e-3
 dSc_dissolved = f_Sc_diss*np.exp(m_log)*1e-12
-f_n_bond_stop = 0.1
+f_n_bond_stop = 0
 
 # time step
 factor_dt_crit = 0.6
@@ -88,7 +93,7 @@ if Path('save').exists():
 os.mkdir('save')
 
 # define wall material (no friction)
-O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
@@ -96,7 +101,7 @@ lateral_plate = O.bodies[0]
 upper_plate = O.bodies[-1]
 
 # define grain material
-O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
                                isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
                                momentRotationLaw=True, alphaKr=0, alphaKtw=0))
 # frictionAngle, alphaKr, alphaKtw are set to 0 during IC. The real value is set after IC.
@@ -415,8 +420,10 @@ def cementation():
     for x in x_L :
         p_x_L.append(pdf_lognormal(x,m_log,s_log))
     # counter
-    global counter_bond, counter_bond0
+    global counter_bond, counter_bond0, counter_bond_broken_diss, counter_bond_broken_load
     counter_bond = 0
+    counter_bond_broken_diss = 0
+    counter_bond_broken_load = 0
     # iterate on interactions
     for i in O.interactions:
         # only grain-grain contact can be cemented
@@ -549,8 +556,9 @@ def dissolve():
     saveData()
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
     # count the number of bond
-    global counter_bond
+    global counter_bond, counter_bond_broken_diss, counter_bond_broken_load
     counter_bond = 0
+    counter_bond_broken = 0
     # iterate on interactions
     for i in O.interactions:
         # only grain-grain contact can be cemented
@@ -563,9 +571,13 @@ def dissolve():
                 if i.phys.normalAdhesion <= 0 or i.phys.shearAdhesion <=0 :
                     # bond brokes
                     counter_bond = counter_bond - 1
+                    counter_bond_broken = counter_bond_broken + 1
                     i.phys.cohesionBroken = True
                     i.phys.normalAdhesion = 0
                     i.phys.shearAdhesion = 0
+    # update the counter of bond dissolved during the dissolution step
+    counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
+    counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
 
 #-------------------------------------------------------------------------------
 
@@ -624,7 +636,8 @@ def addPlotData():
         if isinstance(b.shape, Sphere) :
             Mass_total = Mass_total + b.state.mass
     # add data
-    plot.addData(i=O.iter, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(), counter_bond=counter_bond,\
+    plot.addData(i=O.iter, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(), \
+                counter_bond=counter_bond, counter_bond_broken_diss=counter_bond_broken_diss, counter_bond_broken_load=counter_bond_broken_load,\
                  Fx=Fx, Fz=Fz, Z_plate=upper_plate.state.pos[2], conf_verified=Fz/F_load*100, k0=k0, Mass_total=Mass_total,\
                  w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
 
@@ -647,6 +660,8 @@ def saveData():
     L_mass_diss = []
     L_ite  = []
     L_counter_bond = []
+    L_counter_bond_broken_diss = []
+    L_counter_bond_broken_load = []
     file = 'data/'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -658,11 +673,13 @@ def saveData():
             L_confinement.append(data[i][4])
             L_coordination.append(data[i][5])
             L_counter_bond.append(data[i][6])
-            L_ite.append(data[i][7]-iter_0)
-            L_k0.append(data[i][8])
-            L_porosity.append(data[i][9])
-            L_unbalanced.append(data[i][10])
-            L_vert_strain.append(data[i][11])
+            L_counter_bond_broken_diss.append(data[i][7])
+            L_counter_bond_broken_load.append(data[i][8])
+            L_ite.append(data[i][9]-iter_0)
+            L_k0.append(data[i][10])
+            L_porosity.append(data[i][11])
+            L_unbalanced.append(data[i][12])
+            L_vert_strain.append(data[i][13])
             L_mass_diss.append(100*(L_mass[0]-L_mass[-1])/L_mass[0])
 
         # plot
@@ -674,8 +691,10 @@ def saveData():
         ax2.plot(L_counter_bond)
         ax2.set_title('Number of bond (-) - step (-)')
 
-        ax3.plot(L_confinement)
-        ax3.set_title('Confinement (%) - step (-)')
+        ax3.plot(L_counter_bond_broken_diss, label='during dissolution')
+        ax3.plot(L_counter_bond_broken_load, label='during loading')
+        ax3.set_title('Number of bonds broken (-) - step (-)')
+        ax3.legend()
 
         ax4.plot(L_vert_strain)
         ax4.set_title(r'$\epsilon_v$ (%) - step (-)')
@@ -716,9 +735,8 @@ def whereAmI():
     if 'Current Step' in O.tags.keys():
         print('Iteration',O.iter)
         print(O.tags['Current Step'],'dissolutions done :')
-        print('\tMean R =',round(1-int(O.tags['Current Step'])*dR_dissolved/rMean,2),'initial mean radius')
-        print('\tMass =',round((1-int(O.tags['Current Step'])*dR_dissolved/rMean)**3,2),'initial mass')
         print('Sample description :')
+        print('\tNumber of bonds =', int(counter_bond),'(/)',int(counter_bond0))
         print('\tepsilon_v =', round(100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],2),'(%)')
         print('\tPorosity =', round(porosity(),3),'(-)')
         print('\tCoordination =', round(avgNumInteractions(),1),'(-)')
