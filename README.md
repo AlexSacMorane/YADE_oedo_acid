@@ -11,3 +11,5 @@ Different files.
     Investigate oedometer test under acid injection
 - AcidOedo_Rock.py
     Investigate oedometer test under acid injection with cohesive grains
+- AcidOedo_Calcarenite.py
+    Investigate oedometer test under acid injection with cohesive grain (dissolve grain and bond)
