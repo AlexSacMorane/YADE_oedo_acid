@@ -259,7 +259,7 @@ def checkUnbalanced_load_cementation_ic():
     simulation_report.write("Pressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
-    print("\nPressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\")
+    print("\nPressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     # switch on friction, rolling resistance and twisting resistance between particles
     O.materials[-1].frictionAngle = frictionAngleReal
     O.materials[-1].alphaKr = alphaKrReal
