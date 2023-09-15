@@ -653,8 +653,6 @@ def dissolve():
     """
     Dissolve bond with a constant surface reduction.
     """
-    # save at the end
-    saveData()
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
     # count the number of bond
     global counter_bond, counter_bond_broken_diss, counter_bond_broken_load
@@ -679,6 +677,8 @@ def dissolve():
     # update the counter of bond dissolved during the dissolution step
     counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
     counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
+    # save at the end
+    saveData()
 
 #-------------------------------------------------------------------------------
 
