@@ -35,29 +35,29 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e5 # Pa
-kp = 5e-9 # m.N-1
+P_load = 1e6 # Pa
+kp = 1e-9 # m.N-1
 
 # Lateral wall
-k0_target = 0.5
+k0_target = 0.6
 # same kp as top wall
 
 # cementation
-P_cementation = 1e4 # Pa
+P_cementation = 1e5 # Pa
 # 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
 # 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
 # 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
 # 13BT : E ( 860MPa), f_cemented (1.00), m_log (8.44), s_log (0.92)
 # 13MB : E (1000MPa), f_cemented (1.00), m_log (8.77), s_log (0.73)
-type_cementation = '11BB' # only for the report
-f_cemented = 0.98 # -
-m_log = 8.01 # -
-s_log = 0.88 # -
+type_cementation = '13MB' # only for the report
+f_cemented = 1. # -
+m_log = 8.77 # -
+s_log = 0.73 # -
 tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
 
 # Dissolution
-f_Sc_diss = 5e-3
+f_Sc_diss = 1e-3
 dSc_dissolved = f_Sc_diss*np.exp(m_log)*1e-12
 f_n_bond_stop = 0
 
@@ -102,7 +102,7 @@ if Path('save').exists():
 os.mkdir('save')
 
 # define wall material (no friction)
-O.materials.append(CohFrictMat(young=760e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
@@ -110,7 +110,7 @@ lateral_plate = O.bodies[1]
 upper_plate = O.bodies[-1]
 
 # define grain material
-O.materials.append(CohFrictMat(young=760e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
                                isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
                                momentRotationLaw=True, alphaKr=0, alphaKtw=0))
 # frictionAngle, alphaKr, alphaKtw are set to 0 during IC. The real value is set after IC.
@@ -387,7 +387,7 @@ def checkUnbalanced_load_confinement_ic():
     # next time, do not call this function anymore, but the next one instead
     checker.command = 'checkUnbalanced_load_k0_ic()'
     # control lateral wall
-    O.engines = O.engines + [PyRunner(command='controlLateralWall_ic()', iterPeriod = 1)]
+    O.engines = O.engines + [PyRunner(command='controlLateralWall_ic()', iterPeriod = 1, label='k0_checker')]
 
 #-------------------------------------------------------------------------------
 
@@ -412,12 +412,21 @@ def controlLateralWall_ic():
 
 #-------------------------------------------------------------------------------
 
+def DoNotControlLateralWall_ic():
+    '''
+    Switch off the control of the lateral wall.
+    '''
+    lateral_plate.state.vel = (0,0,0)
+    O.engines = O.engines[:-1]
+
+#-------------------------------------------------------------------------------
+
 def checkUnbalanced_load_k0_ic():
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
     if abs(O.forces.f(upper_plate.id)[2]  -          P_load*lateral_plate.state.pos[0]*Dy)/(          P_load*lateral_plate.state.pos[0]*Dy) > 0.005 and\
-       abs(O.forces.f(lateral_plate.id)[0]-k0_target*P_load*upper_plate.state.pos[2]*Dy)  /(k0_target*P_load*upper_plate.state.pos[2]*Dy)   > 0.005:
+    abs(O.forces.f(lateral_plate.id)[0]-k0_target*P_load*upper_plate.state.pos[2]*Dy)  /(k0_target*P_load*upper_plate.state.pos[2]*Dy)   > 0.005:
         return
     if unbalancedForce() > unbalancedForce_criteria :
         return
@@ -441,8 +450,8 @@ def checkUnbalanced_load_k0_ic():
     # reset plot (IC done, simulation starts)
     plot.reset()
     # switch off control lateral wall
+    k0_checker.command = 'DoNotControlLateralWall_ic()'
     O.engines = O.engines[:-1]
-    lateral_plate.state.vel = (0, 0, 0)
     # save new reference position for upper wall
     upper_plate.state.refPos = upper_plate.state.pos
     # next time, do not call this function anymore, but the next one instead
