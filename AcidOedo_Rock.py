@@ -451,7 +451,6 @@ def checkUnbalanced_load_k0_ic():
     plot.reset()
     # switch off control lateral wall
     k0_checker.command = 'DoNotControlLateralWall_ic()'
-    O.engines = O.engines[:-1]
     # save new reference position for upper wall
     upper_plate.state.refPos = upper_plate.state.pos
     # next time, do not call this function anymore, but the next one instead
