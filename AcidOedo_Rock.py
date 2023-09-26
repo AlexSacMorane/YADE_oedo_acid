@@ -425,7 +425,7 @@ def checkUnbalanced_load_k0_ic():
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
-    if abs(O.forces.f(upper_plate.id)[2]  -          P_load*lateral_plate.state.pos[0]*Dy)/(          P_load*lateral_plate.state.pos[0]*Dy) > 0.005 and\
+    if abs(O.forces.f(upper_plate.id)[2]  -          P_load*lateral_plate.state.pos[0]*Dy)/(          P_load*lateral_plate.state.pos[0]*Dy) > 0.005 or\
     abs(O.forces.f(lateral_plate.id)[0]-k0_target*P_load*upper_plate.state.pos[2]*Dy)  /(k0_target*P_load*upper_plate.state.pos[2]*Dy)   > 0.005:
         return
     if unbalancedForce() > unbalancedForce_criteria :
