@@ -713,7 +713,7 @@ def dissolve():
                 inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
                 # no moment/twist for sphere-wall
     # update time step
-    # O.dt = factor_dt_crit * PWaveTimeStep()
+    O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
 
