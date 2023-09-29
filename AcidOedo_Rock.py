@@ -36,14 +36,14 @@ n_steps_ic = 100
 
 # Top wall
 P_load = 1e6 # Pa
-kp = 1e-9 # m.N-1
+kp = 1e-10 # m.N-1
 
 # Lateral wall
-k0_target = 0.6
+k0_target = 0.7
 # same kp as top wall
 
 # cementation
-P_cementation = 1e5 # Pa
+P_cementation = 1e4 # Pa
 # 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
 # 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
 # 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
@@ -53,6 +53,8 @@ type_cementation = '13MB' # only for the report
 f_cemented = 1. # -
 m_log = 8.77 # -
 s_log = 0.73 # -
+YoungModulus = 1000e6
+considerYoungReduction = True
 tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
 
@@ -102,7 +104,7 @@ if Path('save').exists():
 os.mkdir('save')
 
 # define wall material (no friction)
-O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
@@ -110,7 +112,7 @@ lateral_plate = O.bodies[1]
 upper_plate = O.bodies[-1]
 
 # define grain material
-O.materials.append(CohFrictMat(young=1000e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
                                isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
                                momentRotationLaw=True, alphaKr=0, alphaKtw=0))
 # frictionAngle, alphaKr, alphaKtw are set to 0 during IC. The real value is set after IC.
@@ -357,8 +359,7 @@ def cementation():
     checker.command = 'checkUnbalanced_load_confinement_ic()'
     checker.iterPeriod = 200
     # change the vertical pressure applied
-    O.engines = O.engines[:-1]
-    O.engines = O.engines + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
+    O.engines = O.engines[:-1] + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
 
 #-------------------------------------------------------------------------------
 
@@ -450,7 +451,7 @@ def checkUnbalanced_load_k0_ic():
     # reset plot (IC done, simulation starts)
     plot.reset()
     # switch off control lateral wall
-    k0_checker.command = 'DoNotControlLateralWall_ic()'
+    O.engines = O.engines[:-1]+[PyRunner(command='DoNotControlLateralWall_ic()', iterPeriod = 1)]
     # save new reference position for upper wall
     upper_plate.state.refPos = upper_plate.state.pos
     # next time, do not call this function anymore, but the next one instead
@@ -688,6 +689,31 @@ def dissolve():
     counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
     # save at the end
     saveData()
+    # update the Young Modulus (Reduce with the dissolution fraction)
+    if considerYoungReduction :
+        f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
+        NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
+        # update material
+        for mat in O.materials :
+            mat.young = NewYoungModulus
+        # update the interactions
+        for inter in O.interactions :
+            if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
+                inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
+                inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
+                inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+                inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+            else : # Sphere-Wall contact
+                if isinstance(O.bodies[inter.id1].shape, Sphere):
+                    grain = O.bodies[inter.id1]
+                else:
+                    grain = O.bodies[inter.id2]
+                # diameter of the wall is equivalent of the diameter of the sphere
+                inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
+                inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
+                # no moment/twist for sphere-wall
+    # update time step
+    # O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
 
