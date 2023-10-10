@@ -59,8 +59,11 @@ tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
 
 # Dissolution
-f_Sc_diss = 1e-3
-dSc_dissolved = f_Sc_diss*np.exp(m_log)*1e-12
+f_Sc_diss_1 = 2e-2
+f_Sc_diss_2 = 5e-2
+dSc_dissolved_1 = f_Sc_diss_1*np.exp(m_log)*1e-12
+dSc_dissolved_2 = f_Sc_diss_2*np.exp(m_log)*1e-12
+diss_level_1_2 = 0.95
 f_n_bond_stop = 0
 
 # time step
@@ -675,8 +678,12 @@ def dissolve():
             if not i.phys.cohesionBroken :
                 counter_bond = counter_bond + 1
                 # set normal and shear adhesions
-                i.phys.normalAdhesion = i.phys.normalAdhesion - tensileCohesion*dSc_dissolved
-                i.phys.shearAdhesion = i.phys.shearAdhesion - shearCohesion*dSc_dissolved
+                if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
+                    i.phys.normalAdhesion = i.phys.normalAdhesion - tensileCohesion*dSc_dissolved_1
+                    i.phys.shearAdhesion = i.phys.shearAdhesion - shearCohesion*dSc_dissolved_1
+                else :
+                    i.phys.normalAdhesion = i.phys.normalAdhesion - tensileCohesion*dSc_dissolved_2
+                    i.phys.shearAdhesion = i.phys.shearAdhesion - shearCohesion*dSc_dissolved_2
                 if i.phys.normalAdhesion <= 0 or i.phys.shearAdhesion <=0 :
                     # bond brokes
                     counter_bond = counter_bond - 1
