@@ -17,7 +17,7 @@ from pathlib import Path
 #User
 #-------------------------------------------------------------------------------
 
-readParamsFromTable(type_cementation='2T')
+readParamsFromTable(type_cementation='2T', k0_target=0.7, P_load=1e6, considerYoungReduction=True)
 from yade.params.table import *
 
 # PSD
@@ -38,15 +38,13 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e6 # Pa
 kp = 1e-10 # m.N-1
 
 # Lateral wall
-k0_target = 0.1
 # same kp as top wall
 
 # cementation
-P_cementation = 1e4 # Pa
+P_cementation = 0.01*P_load # Pa
 # 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
 # 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
 # 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
@@ -74,12 +72,10 @@ elif type_cementation == '13BT':
     YoungModulus = 860e6
 elif type_cementation == '13MB':
     f_cemented = 1. # -
-    m_log = 8.77. # -
+    m_log = 8.77 # -
     s_log = 0.73 # -
     YoungModulus = 1000e6
 
-YoungModulus = 300e6
-considerYoungReduction = True
 tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
 
@@ -118,18 +114,7 @@ tic_0 = tic
 iter_0 = 0
 
 # plan simulation
-if Path('plot').exists():
-    shutil.rmtree('plot')
-os.mkdir('plot')
-if Path('data').exists():
-    shutil.rmtree('data')
-os.mkdir('data')
-if Path('vtk').exists():
-    shutil.rmtree('vtk')
-os.mkdir('vtk')
-if Path('save').exists():
-    shutil.rmtree('save')
-os.mkdir('save')
+
 
 # define wall material (no friction)
 O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
@@ -185,6 +170,9 @@ def checkUnbalanced_ir_ic():
     '''
     Increase particle radius until a steady-state is found.
     '''
+    if O.iter > 5000000 :
+        O.pause()
+        stop_ic()
     # check grains is in the box
     L_to_erase = []
     for b in O.bodies:
@@ -219,7 +207,7 @@ def checkUnbalanced_ir_ic():
     binsSizes, binsProc, binsSumCum = psd(bins=10)
     L_L_psd_binsSizes.append(binsSizes)
     L_L_psd_binsProc.append(binsProc)
-    plotPSD()
+    #plotPSD()
     # characterize the ic algorithm
     global tic
     global iter_0
@@ -270,6 +258,9 @@ def controlTopWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_cementation_ic():
+    if O.iter > 5000000 :
+        O.pause()
+        stop_ic()
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -309,6 +300,9 @@ def checkUnbalanced_load_cementation_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_param_ic():
+    if O.iter > 5000000 :
+        O.pause()
+        stop_ic()
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -392,6 +386,9 @@ def cementation():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_confinement_ic():
+    if O.iter > 5000000 :
+        O.pause()
+        stop_ic()
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
@@ -451,6 +448,9 @@ def DoNotControlLateralWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_k0_ic():
+    if O.iter > 5000000 :
+        O.pause()
+        stop_ic()
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
@@ -591,6 +591,14 @@ def saveData_ic():
         plt.close()
 
 #-------------------------------------------------------------------------------
+
+def stop_ic():
+    '''
+    Stop the simulation.
+    '''
+    raise ValueError('Simulation stops : too long...')
+
+#-------------------------------------------------------------------------------
 #Load
 #-------------------------------------------------------------------------------
 
@@ -643,36 +651,31 @@ def checkUnbalanced():
     L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/(P_load*Dx*Dy)*100)
     L_count_bond.append(count_bond())
 
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
-
-    ax1.plot(L_unbalanced_ite)
-    ax1.set_title('unbalanced force (-)')
-
-    ax2.plot(L_k0_ite)
-    ax2.set_title(r'$k_0$ (-)')
-
-    ax3.plot(L_confinement_ite)
-    ax3.set_title('confinement (%)')
-
-    ax4.plot(L_count_bond)
-    ax4.set_title('Number of bond (-)')
-
-    fig.savefig('plot/tracking_ite.png')
-    plt.close()
+    #fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
+    #ax1.plot(L_unbalanced_ite)
+    #ax1.set_title('unbalanced force (-)')
+    #ax2.plot(L_k0_ite)
+    #ax2.set_title(r'$k_0$ (-)')
+    #ax3.plot(L_confinement_ite)
+    #ax3.set_title('confinement (%)')
+    #ax4.plot(L_count_bond)
+    #ax4.set_title('Number of bond (-)')
+    #fig.savefig('plot/tracking_ite.png')
+    #plt.close()
 
     if (unbalancedForce() < unbalancedForce_criteria) and \
        (abs(O.forces.f(upper_plate.id)[2]-P_load*Dx*Dy) < 0.01*P_load*Dx*Dy):
 
         # save old figure
-        fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
-        ax1.plot(L_unbalanced_ite)
-        ax1.set_title('unbalanced force (-)')
-        ax2.plot(L_k0_ite)
-        ax2.set_title(r'$k_0$ (-)')
-        ax3.plot(L_confinement_ite)
-        ax3.set_title('confinement (%)')
-        fig.savefig('plot/tracking_prev_ite.png')
-        plt.close()
+        #fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
+        #ax1.plot(L_unbalanced_ite)
+        #ax1.set_title('unbalanced force (-)')
+        #ax2.plot(L_k0_ite)
+        #ax2.set_title(r'$k_0$ (-)')
+        #ax3.plot(L_confinement_ite)
+        #ax3.set_title('confinement (%)')
+        #fig.savefig('plot/tracking_prev_ite.png')
+        #plt.close()
 
         # reset trackers
         L_unbalanced_ite = []
@@ -789,10 +792,14 @@ def stopLoad():
 
     # save simulation
     os.mkdir('../AcidOedo_Rock_data/'+O.tags['d.id'])
-    shutil.copytree('data','../AcidOedo_Rock_data/'+O.tags['d.id']+'/data')
-    shutil.copytree('plot','../AcidOedo_Rock_data/'+O.tags['d.id']+'/plot')
-    shutil.copytree('save','../AcidOedo_Rock_data/'+O.tags['d.id']+'/save')
-    shutil.copy('AcidOedo_Rock.py','../AcidOedo_Rock_data/'+O.tags['d.id']+'/AcidOedo_Rock.py')
+    os.mkdir('../AcidOedo_Rock_data/'+O.tags['d.id']+'/data')
+    shutil.copy('data/IC_'+O.tags['d.id']+'.txt','../AcidOedo_Rock_data/'+O.tags['d.id']+'/data/IC_'+O.tags['d.id']+'.txt')
+    shutil.copy('data/'+O.tags['d.id']+'.txt','../AcidOedo_Rock_data/'+O.tags['d.id']+'/data/'+O.tags['d.id']+'.txt')
+    os.mkdir('../AcidOedo_Rock_data/'+O.tags['d.id']+'/plot')
+    shutil.copy('plot/IC_'+O.tags['d.id']+'.png','../AcidOedo_Rock_data/'+O.tags['d.id']+'/plot/IC_'+O.tags['d.id']+'.png')
+    shutil.copy('plot/'+O.tags['d.id']+'.png','../AcidOedo_Rock_data/'+O.tags['d.id']+'/plot/'+O.tags['d.id']+'.png')
+    shutil.copy('AcidOedo_Rock_batch.py','../AcidOedo_Rock_data/'+O.tags['d.id']+'/AcidOedo_Rock_batch.py')
+    shutil.copy('AcidOedo_Rock.table','../AcidOedo_Rock_data/'+O.tags['d.id']+'/AcidOedo_Rock.table')
     shutil.copy(O.tags['d.id']+'_report.txt','../AcidOedo_Rock_data/'+O.tags['d.id']+'/'+O.tags['d.id']+'_report.txt')
 
 #-------------------------------------------------------------------------------
