@@ -35,7 +35,7 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e6 # Pa
+P_load = 1e7 # Pa
 kp = 1e-10 # m.N-1
 
 # Lateral wall
@@ -43,7 +43,7 @@ k0_target = 0.7
 # same kp as top wall
 
 # cementation
-P_cementation = 1e4 # Pa
+P_cementation = P_load*0.01 # Pa
 # 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
 # 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
 # 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
@@ -111,6 +111,14 @@ O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
+# extent the plates
+O.bodies[0].shape.extents = Vector3(0,1.5*Dy/2,1.5*Dz/2)
+O.bodies[1].shape.extents = Vector3(0,1.5*Dy/2,1.5*Dz/2)
+O.bodies[2].shape.extents = Vector3(1.5*Dx/2,0,1.5*Dz/2)
+O.bodies[3].shape.extents = Vector3(1.5*Dx/2,0,1.5*Dz/2)
+O.bodies[4].shape.extents = Vector3(1.5*Dx/2,1.5*Dy/2,0)
+O.bodies[5].shape.extents = Vector3(1.5*Dx/2,1.5*Dy/2,0)
+# global names
 lateral_plate = O.bodies[1]
 upper_plate = O.bodies[-1]
 
@@ -234,7 +242,7 @@ def controlTopWall_ic():
         upper_plate.state.pos =  (lateral_plate.state.pos[0]/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
     else :
         dF = Fz - P_cementation*lateral_plate.state.pos[0]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.00002/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -406,7 +414,7 @@ def controlLateralWall_ic():
         lateral_plate.state.pos =  (max([b.state.pos[0]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]), Dy/2, upper_plate.state.pos[2]/2)
     else :
         dF = Fx - k0_target*P_load*upper_plate.state.pos[2]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.000005/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -615,7 +623,7 @@ def checkUnbalanced():
     else :
         k0 = 0
     L_k0_ite.append(k0)
-    L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/(P_load*Dx*Dy)*100)
+    L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/(P_load*lateral_plate.state.pos[0]*Dy)*100)
     L_count_bond.append(count_bond())
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
@@ -636,7 +644,7 @@ def checkUnbalanced():
     plt.close()
 
     if (unbalancedForce() < unbalancedForce_criteria) and \
-       (abs(O.forces.f(upper_plate.id)[2]-P_load*Dx*Dy) < 0.01*P_load*Dx*Dy):
+       (abs(O.forces.f(upper_plate.id)[2]-P_load*lateral_plate.state.pos[0]*Dy) < 0.01*P_load*lateral_plate.state.pos[0]*Dy):
 
         # save old figure
         fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
