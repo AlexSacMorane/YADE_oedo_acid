@@ -369,6 +369,9 @@ def cementation():
     # next time, do not call this function anymore, but the next one instead
     checker.command = 'checkUnbalanced_load_confinement_ic()'
     checker.iterPeriod = 200
+    # activate Young reduction
+    if considerYoungReduction :
+        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 100)] + O.engines[-1]
     # change the vertical pressure applied
     O.engines = O.engines[:-1] + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
 
@@ -577,6 +580,36 @@ def saveData_ic():
 #Load
 #-------------------------------------------------------------------------------
 
+def YoungReduction():
+    '''
+    Reduce the Young modulus with the number of bond dissolved.
+
+    E = (E0-E1)*f_diss + E1
+    '''
+    f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
+    NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
+    # update material
+    for mat in O.materials :
+        mat.young = NewYoungModulus
+    # update the interactions
+    for inter in O.interactions :
+        if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
+            inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
+            inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
+            inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+            inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+        else : # Sphere-Wall contact
+            if isinstance(O.bodies[inter.id1].shape, Sphere):
+                grain = O.bodies[inter.id1]
+            else:
+                grain = O.bodies[inter.id2]
+            # diameter of the wall is equivalent of the diameter of the sphere
+            inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
+            inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
+            # no moment/twist for sphere-wall
+
+#-------------------------------------------------------------------------------
+
 def controlTopWall():
     '''
     Control the upper wall to applied a defined confinement force.
@@ -704,29 +737,6 @@ def dissolve():
     counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
     # save at the end
     saveData()
-    # update the Young Modulus (Reduce with the dissolution fraction)
-    if considerYoungReduction :
-        f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
-        NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
-        # update material
-        for mat in O.materials :
-            mat.young = NewYoungModulus
-        # update the interactions
-        for inter in O.interactions :
-            if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
-                inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
-                inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
-                inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-                inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-            else : # Sphere-Wall contact
-                if isinstance(O.bodies[inter.id1].shape, Sphere):
-                    grain = O.bodies[inter.id1]
-                else:
-                    grain = O.bodies[inter.id2]
-                # diameter of the wall is equivalent of the diameter of the sphere
-                inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
-                inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
-                # no moment/twist for sphere-wall
     # update time step
     O.dt = factor_dt_crit * PWaveTimeStep()
 
