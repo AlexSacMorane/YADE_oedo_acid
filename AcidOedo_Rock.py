@@ -572,7 +572,7 @@ def saveData_ic():
         ax3.set_title('Number of bond (-)')
 
         ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x$ (%)')
-        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_v$ (%)')
+        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_z$ (%)')
         ax4.legend()
         ax4.set_title('Strains (%)')
 
@@ -861,7 +861,7 @@ def saveData():
         ax3.legend()
 
         ax4.plot(L_s_bond_diss, L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%)')
+        ax4.set_title(r'$\epsilon_z$ (%)')
 
         ax5.plot(L_s_bond_diss, L_porosity)
         ax5.set_title('Porosity (-)')
@@ -902,7 +902,7 @@ def whereAmI():
         print(O.tags['Current Step'],'dissolutions done :')
         print('Sample description :')
         print('\tNumber of bonds =', int(counter_bond),'(/)',int(counter_bond0))
-        print('\tepsilon_v =', round(100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],2),'(%)')
+        print('\tepsilon_z =', round(100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],2),'(%)')
         print('\tPorosity =', round(porosity(),3),'(-)')
         print('\tCoordination =', round(avgNumInteractions(),1),'(-)')
     else :
