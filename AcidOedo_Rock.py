@@ -243,7 +243,7 @@ def controlTopWall_ic():
         upper_plate.state.pos =  (lateral_plate.state.pos[0]/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
     else :
         dF = Fz - P_cementation*lateral_plate.state.pos[0]*Dy
-        v_plate_max = rMean*0.00002/O.dt
+        v_plate_max = rMean*0.00005/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -418,7 +418,7 @@ def controlLateralWall_ic():
         lateral_plate.state.pos =  (max([b.state.pos[0]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]), Dy/2, upper_plate.state.pos[2]/2)
     else :
         dF = Fx - k0_target*P_load*upper_plate.state.pos[2]*Dy
-        v_plate_max = rMean*0.000005/O.dt
+        v_plate_max = rMean*0.00002/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -489,11 +489,11 @@ def addPlotData_cementation_ic():
     Save data in plot.
     """
     # add forces applied on wall x and z
-    sz = O.forces.f(upper_plate.id)[2]/(Dx*Dy)
-    sx = O.forces.f(lateral_plate.id)[0]/(Dy*Dz)
+    sz = O.forces.f(upper_plate.id)[2]/(lateral_plate.state.pos[0]*Dy)
+    sx = O.forces.f(lateral_plate.id)[0]/(Dy*upper_plate.state.pos[2])
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, \
+                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, n_bond=0,\
                  vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
@@ -505,9 +505,15 @@ def addPlotData_confinement_ic():
     # add forces applied on wall x and z
     sz = O.forces.f(upper_plate.id)[2]/(lateral_plate.state.pos[0]*Dy)
     sx = O.forces.f(lateral_plate.id)[0]/(Dy*upper_plate.state.pos[2])
+    # count the number the bond
+    n_bond = 0
+    for i in O.interactions:
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere):
+            if not i.phys.cohesionBroken :
+                n_bond = n_bond + 1
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, \
+                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, n_bond=n_bond,\
                  vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
@@ -527,6 +533,7 @@ def saveData_ic():
     L_vert_strain = []
     L_lat_strain = []
     L_porosity = []
+    L_n_bond = []
     file = 'data/IC_'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -538,11 +545,12 @@ def saveData_ic():
             L_sigma_z.append(abs(data[i][1]))
             L_confinement.append(data[i][2])
             L_coordination.append(data[i][3])
-            L_unbalanced.append(data[i][7])
             L_ite.append(data[i][4])
-            L_porosity.append(data[i][6])
-            L_vert_strain.append(data[i][8])
             L_lat_strain.append(data[i][5])
+            L_n_bond.append(data[i][6])
+            L_porosity.append(data[i][7])
+            L_unbalanced.append(data[i][8])
+            L_vert_strain.append(data[i][9])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(20,10),num=1)
@@ -554,19 +562,14 @@ def saveData_ic():
 
         ax2.plot(L_ite, L_unbalanced, 'b')
         ax2.set_ylabel('Unbalanced (-)', color='b')
+        ax2.set_ylim(ymin=0, ymax=2*unbalancedForce_criteria)
         ax2b = ax2.twinx()
         ax2b.plot(L_ite, L_confinement, 'r')
-        #ax2b.set_ylabel('Confinement (%)', color='r')
+        ax2b.set_ylabel('Confinement (%)', color='r')
         ax2b.set_title('Steady-state indices')
 
-        ax3.plot(L_ite, L_unbalanced, 'b')
-        #ax3.set_ylabel('Unbalanced (-)', color='b')
-        ax3.set_ylim(ymin=L_unbalanced[-1]/5, ymax=L_unbalanced[-1]*5)
-        ax3b = ax3.twinx()
-        ax3b.plot(L_ite, L_confinement, 'r')
-        ax3b.set_ylim(ymin=50, ymax=200)
-        ax3b.set_ylabel('Confinement (%)', color='r')
-        ax3b.set_title('Steady-state indices (focus)')
+        ax3.plot(L_ite, L_n_bond)
+        ax3.set_title('Number of bond (-)')
 
         ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x$ (%)')
         ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_v$ (%)')
@@ -628,7 +631,7 @@ def controlTopWall():
         upper_plate.state.pos =  (lateral_plate.state.pos[0]/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
     else :
         dF = Fz - P_load*lateral_plate.state.pos[0]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.00005/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -686,17 +689,6 @@ def checkUnbalanced():
     if (unbalancedForce() < unbalancedForce_criteria) and \
        (abs(O.forces.f(upper_plate.id)[2]-P_load*lateral_plate.state.pos[0]*Dy) < 0.01*P_load*lateral_plate.state.pos[0]*Dy):
 
-        # save old figure
-        fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
-        ax1.plot(L_unbalanced_ite)
-        ax1.set_title('unbalanced force (-)')
-        ax2.plot(L_k0_ite)
-        ax2.set_title(r'$k_0$ (-)')
-        ax3.plot(L_confinement_ite)
-        ax3.set_title('confinement (%)')
-        fig.savefig('plot/tracking_prev_ite.png')
-        plt.close()
-
         # reset trackers
         L_unbalanced_ite = []
         L_k0_ite = []
@@ -716,7 +708,7 @@ def dissolve():
     """
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
     # count the number of bond
-    global counter_bond, counter_bond_broken_diss, counter_bond_broken_load
+    global counter_bond, counter_bond_broken_diss, counter_bond_broken_load, s_bond_diss
     counter_bond = 0
     counter_bond_broken = 0
     # iterate on interactions
