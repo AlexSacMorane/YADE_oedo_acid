@@ -568,8 +568,8 @@ def saveData_ic():
         ax3b.set_ylabel('Confinement (%)', color='r')
         ax3b.set_title('Steady-state indices (focus)')
 
-        ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x (%)$')
-        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_v (%)$')
+        ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x$ (%)')
+        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_v$ (%)')
         ax4.legend()
         ax4.set_title('Strains (%)')
 
