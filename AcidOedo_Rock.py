@@ -36,7 +36,7 @@ n_steps_ic = 100
 
 # Top wall
 P_load = 1e7 # Pa
-kp = 1e-10 # m.N-1
+kp = 1e-9 # m.N-1
 
 # Lateral wall
 k0_target = 0.7
@@ -65,6 +65,7 @@ dSc_dissolved_1 = f_Sc_diss_1*np.exp(m_log)*1e-12
 dSc_dissolved_2 = f_Sc_diss_2*np.exp(m_log)*1e-12
 diss_level_1_2 = 0.95
 f_n_bond_stop = 0
+s_bond_diss = 0
 
 # time step
 factor_dt_crit = 0.6
@@ -371,7 +372,7 @@ def cementation():
     checker.iterPeriod = 200
     # activate Young reduction
     if considerYoungReduction :
-        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 100)] + O.engines[-1]
+        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 1)] + [O.engines[-1]]
     # change the vertical pressure applied
     O.engines = O.engines[:-1] + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
 
@@ -440,8 +441,8 @@ def checkUnbalanced_load_k0_ic():
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
-    if abs(O.forces.f(upper_plate.id)[2]  -          P_load*lateral_plate.state.pos[0]*Dy)/(          P_load*lateral_plate.state.pos[0]*Dy) > 0.005 or\
-    abs(O.forces.f(lateral_plate.id)[0]-k0_target*P_load*upper_plate.state.pos[2]*Dy)  /(k0_target*P_load*upper_plate.state.pos[2]*Dy)   > 0.005:
+    if abs(O.forces.f(upper_plate.id)[2]  - P_load*lateral_plate.state.pos[0]*Dy)/(P_load*lateral_plate.state.pos[0]*Dy) > 0.005 or\
+    abs(O.forces.f(lateral_plate.id)[0] - k0_target*P_load*upper_plate.state.pos[2]*Dy)/(k0_target*P_load*upper_plate.state.pos[2]*Dy) > 0.005:
         return
     if unbalancedForce() > unbalancedForce_criteria :
         return
@@ -492,7 +493,8 @@ def addPlotData_cementation_ic():
     sx = O.forces.f(lateral_plate.id)[0]/(Dy*Dz)
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, \
+                 vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
 
@@ -505,7 +507,8 @@ def addPlotData_confinement_ic():
     sx = O.forces.f(lateral_plate.id)[0]/(Dy*upper_plate.state.pos[2])
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, \
+                 vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
 
@@ -522,6 +525,7 @@ def saveData_ic():
     L_unbalanced = []
     L_ite  = []
     L_vert_strain = []
+    L_lat_strain = []
     L_porosity = []
     file = 'data/IC_'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
@@ -534,10 +538,11 @@ def saveData_ic():
             L_sigma_z.append(abs(data[i][1]))
             L_confinement.append(data[i][2])
             L_coordination.append(data[i][3])
-            L_unbalanced.append(data[i][6])
+            L_unbalanced.append(data[i][7])
             L_ite.append(data[i][4])
-            L_porosity.append(data[i][5])
-            L_vert_strain.append(data[i][7])
+            L_porosity.append(data[i][6])
+            L_vert_strain.append(data[i][8])
+            L_lat_strain.append(data[i][5])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(20,10),num=1)
@@ -563,8 +568,10 @@ def saveData_ic():
         ax3b.set_ylabel('Confinement (%)', color='r')
         ax3b.set_title('Steady-state indices (focus)')
 
-        ax4.plot(L_ite, L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%)')
+        ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x (%)$')
+        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_v (%)$')
+        ax4.legend()
+        ax4.set_title('Strains (%)')
 
         ax5.plot(L_ite, L_porosity)
         ax5.set_title('Porosity (-)')
@@ -732,6 +739,11 @@ def dissolve():
                     i.phys.cohesionBroken = True
                     i.phys.normalAdhesion = 0
                     i.phys.shearAdhesion = 0
+    # update bond surface dissolved tracker
+    if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
+        s_bond_diss = s_bond_diss + dSc_dissolved_1
+    else :
+        s_bond_diss = s_bond_diss + dSc_dissolved_2
     # update the counter of bond dissolved during the dissolution step
     counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
     counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
@@ -802,16 +814,12 @@ def addPlotData():
         k0 = abs(sx/sz)
     else :
         k0 = 0
-    # compute mass of the sample
-    Mass_total = 0
-    for b in O.bodies :
-        if isinstance(b.shape, Sphere) :
-            Mass_total = Mass_total + b.state.mass
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(), \
                 counter_bond=counter_bond, counter_bond_broken_diss=counter_bond_broken_diss, counter_bond_broken_load=counter_bond_broken_load,\
-                 Sx=sx, Sz=sz, Z_plate=upper_plate.state.pos[2], conf_verified=sz/P_load*100, k0=k0, Mass_total=Mass_total,\
-                 w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                Sx=sx, Sz=sz, Z_plate=upper_plate.state.pos[2], conf_verified=sz/P_load*100, k0=k0,\
+                w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],
+                s_bond_diss=s_bond_diss)
 
 #-------------------------------------------------------------------------------
 
@@ -822,18 +830,14 @@ def saveData():
     addPlotData()
     plot.saveDataTxt('data/'+O.tags['d.id']+'.txt')
     # post-proccess
+    L_s_bond_diss = []
     L_k0 = []
-    L_confinement = []
-    L_unbalanced = []
-    L_coordination = []
-    L_vert_strain = []
-    L_porosity = []
-    L_mass = []
-    L_mass_diss = []
-    L_ite  = []
     L_counter_bond = []
     L_counter_bond_broken_diss = []
     L_counter_bond_broken_load = []
+    L_vert_strain = []
+    L_porosity = []
+    L_coordination = []
     file = 'data/'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -841,42 +845,39 @@ def saveData():
     file_read.close()
     if len(lines) >= 3:
         for i in range(len(data)):
-            L_mass.append(data[i][2])
-            L_confinement.append(data[i][4])
-            L_coordination.append(data[i][5])
-            L_counter_bond.append(data[i][6])
-            L_counter_bond_broken_diss.append(data[i][7])
-            L_counter_bond_broken_load.append(data[i][8])
-            L_ite.append(data[i][9])
-            L_k0.append(data[i][10])
-            L_porosity.append(data[i][11])
-            L_unbalanced.append(data[i][12])
-            L_vert_strain.append(data[i][13])
-            L_mass_diss.append(100*(L_mass[0]-L_mass[-1])/L_mass[0])
+            L_coordination.append(data[i][4])
+            L_counter_bond.append(data[i][5])
+            L_counter_bond_broken_diss.append(data[i][6])
+            L_counter_bond_broken_load.append(data[i][7])
+            L_k0.append(data[i][9])
+            L_porosity.append(data[i][10])
+            L_s_bond_diss.append(data[i][11])
+            L_vert_strain.append(data[i][12])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(16,9),num=1)
 
-        ax1.plot(L_k0)
-        ax1.set_title(r'$k_0$ (-) - step (-)')
+        ax1.plot(L_s_bond_diss, L_k0)
+        ax1.set_title(r'$k_0$ (-)')
 
-        ax2.plot(L_counter_bond)
-        ax2.set_title('Number of bond (-) - step (-)')
+        ax2.plot(L_s_bond_diss, L_counter_bond)
+        ax2.set_title('Number of bond (-)')
 
-        ax3.plot(L_counter_bond_broken_diss, label='during dissolution')
-        ax3.plot(L_counter_bond_broken_load, label='during loading')
-        ax3.set_title('Number of bonds broken (-) - step (-)')
+        ax3.plot(L_s_bond_diss, L_counter_bond_broken_diss, label='during dissolution')
+        ax3.plot(L_s_bond_diss, L_counter_bond_broken_load, label='during loading')
+        ax3.set_title('Number of bonds broken (-)')
         ax3.legend()
 
-        ax4.plot(L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%) - step (-)')
+        ax4.plot(L_s_bond_diss, L_vert_strain)
+        ax4.set_title(r'$\epsilon_v$ (%)')
 
-        ax5.plot(L_porosity)
-        ax5.set_title('Porosity (-) - step (-)')
+        ax5.plot(L_s_bond_diss, L_porosity)
+        ax5.set_title('Porosity (-)')
 
-        ax6.plot(L_coordination)
-        ax6.set_title('Coordination (-) - step (-)')
+        ax6.plot(L_s_bond_diss, L_coordination)
+        ax6.set_title('Coordination (-)')
 
+        plt.suptitle(r'Trackers - bond surface reduction (m$^2$)')
         plt.savefig('plot/'+O.tags['d.id']+'.png')
         plt.close()
 
