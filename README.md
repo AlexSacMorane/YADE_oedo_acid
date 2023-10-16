@@ -13,3 +13,24 @@ Different files.
     Launch parametric study with AcidOedo_Rock.py
 - AcidOedo_Calcarenite.py
     Investigate oedometer test under acid injection with cohesive grain (dissolve grain and bond)
+
+# like_cha_santamarina.py
+Description in progress
+
+# AcidOedo_Sand.py
+Description in progress
+
+# AcidOedo_Rock.py
+
+Here a granular material is generated composed of particles and bonds between them. The dissolution occurs only at the level of the bonds. The surface of them is decreased by a constant value. Different macro parameters are tracked during the dissolution as k_0 (=\sigma_II/\sigma_I, the vertical (I) and lateral (II) pressures applied on the wall of the box).
+
+The parameters of the simulation are set in the part "User".<br>
+The description of the algorithm is presented in the following paper:<br>
+Sac-Morane A, Veveakis M, Rattez H (????) ??. ??. ??:??. https://doi.org.org/?
+
+# AcidOedo_Rock_batch.py
+Same as AcidOedo_Rock.py but with yade-batch (parametric study).
+Work with AcidOedo_Rock.table.
+
+# AcidOedo_Calcarenite.py
+Description in progress
