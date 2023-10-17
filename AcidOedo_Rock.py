@@ -372,7 +372,7 @@ def cementation():
     checker.iterPeriod = 200
     # activate Young reduction
     if considerYoungReduction :
-        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 1)] + [O.engines[-1]]
+        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 100)] + [O.engines[-1]]
     # change the vertical pressure applied
     O.engines = O.engines[:-1] + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
 
@@ -628,6 +628,8 @@ def YoungReduction():
             inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
             inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
             # no moment/twist for sphere-wall
+    # update time step
+    O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
 
@@ -751,8 +753,6 @@ def dissolve():
         s_bond_diss = s_bond_diss + dSc_dissolved_2
     # update the counter of bond dissolved during the dissolution step
     counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
-    # update time step
-    O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
 
