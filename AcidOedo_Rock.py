@@ -596,6 +596,17 @@ def YoungReduction():
 
     E = (E0-E1)*f_diss + E1
     '''
+    # count the number of bond dissolved
+    global counter_bond, counter_bond_broken_load
+    counter_bond = 0
+    # iterate on interactions
+    for i in O.interactions:
+        # only grain-grain contact can be cemented
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere) :
+            if not i.phys.cohesionBroken :
+                counter_bond = counter_bond + 1
+    counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
+    # compute the new Young modulus
     f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
     NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
     # update material
@@ -707,8 +718,10 @@ def dissolve():
     Dissolve bond with a constant surface reduction.
     """
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
+    # save at the end
+    saveData()
     # count the number of bond
-    global counter_bond, counter_bond_broken_diss, counter_bond_broken_load, s_bond_diss
+    global counter_bond, counter_bond_broken_diss, s_bond_diss
     counter_bond = 0
     counter_bond_broken = 0
     # iterate on interactions
@@ -738,9 +751,6 @@ def dissolve():
         s_bond_diss = s_bond_diss + dSc_dissolved_2
     # update the counter of bond dissolved during the dissolution step
     counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
-    counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
-    # save at the end
-    saveData()
     # update time step
     O.dt = factor_dt_crit * PWaveTimeStep()
 
@@ -844,7 +854,7 @@ def saveData():
             L_k0.append(data[i][9])
             L_porosity.append(data[i][10])
             L_s_bond_diss.append(data[i][11])
-            L_vert_strain.append(data[i][12])
+            L_vert_strain.append(data[i][13])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(16,9),num=1)
