@@ -35,7 +35,7 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e8 # Pa
+P_load = 1e7 # Pa
 kp = 1e-9 # m.N-1
 
 # Lateral wall
@@ -479,7 +479,8 @@ def checkUnbalanced_load_k0_ic():
     # label step
     O.tags['Current Step']='0'
     # trackers
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond, n_try
+    n_try = 0
     L_unbalanced_ite = []
     L_k0_ite = []
     L_confinement_ite = []
@@ -674,8 +675,10 @@ def checkUnbalanced():
     """
     Look for the equilibrium during the loading phase.
     """
+    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond, n_try
+    # count the number of tries
+    n_try = n_try + 1
     # track and plot unbalanced
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
     L_unbalanced_ite.append(unbalancedForce())
     if O.forces.f(upper_plate.id)[2] != 0:
         k0 = abs(O.forces.f(lateral_plate.id)[0]/(upper_plate.state.pos[2]*Dy)*(lateral_plate.state.pos[0]*Dy)/O.forces.f(upper_plate.id)[2])
@@ -702,10 +705,15 @@ def checkUnbalanced():
     fig.savefig('plot/tracking_ite.png')
     plt.close()
 
-    if (unbalancedForce() < unbalancedForce_criteria) and \
-       (abs(O.forces.f(upper_plate.id)[2]-P_load*lateral_plate.state.pos[0]*Dy) < 0.01*P_load*lateral_plate.state.pos[0]*Dy):
+    # verify confinement pressure applied
+    if not abs(O.forces.f(upper_plate.id)[2]-P_load*lateral_plate.state.pos[0]*Dy) < 0.005*P_load*lateral_plate.state.pos[0]*Dy:
+        return
+    # verify unbalanced force criteria
+    # a limit is set for number of tries
+    if unbalancedForce() < unbalancedForce_criteria or n_try > 30:
 
         # reset trackers
+        n_try = 0
         L_unbalanced_ite = []
         L_k0_ite = []
         L_confinement_ite = []
