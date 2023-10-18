@@ -29,8 +29,10 @@ The description of the algorithm is presented in the following paper:<br>
 Sac-Morane A, Veveakis M, Rattez H (????) ??. ??. ??:??. https://doi.org.org/?
 
 # AcidOedo_Rock_batch.py
-Same as AcidOedo_Rock.py but with yade-batch (parametric study).
-Work with AcidOedo_Rock.table.
+Same as AcidOedo_Rock.py but with yade-batch (parametric study).<br>
+Work with AcidOedo_Rock.table.<br>
+
+Different folders must be present: data and plot
 
 # AcidOedo_Calcarenite.py
 Description in progress
