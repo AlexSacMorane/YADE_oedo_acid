@@ -38,13 +38,14 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-kp = 1e-10 # m.N-1
+kp = 1e-9 # m.N-1
 
 # Lateral wall
+k0_target = 1.5
 # same kp as top wall
 
 # cementation
-P_cementation = 0.01*P_load # Pa
+P_cementation = P_load*0.01 # Pa
 # 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
 # 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
 # 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
@@ -81,11 +82,12 @@ shearCohesion = 6.6e6 # Pa
 
 # Dissolution
 f_Sc_diss_1 = 2e-2
-f_Sc_diss_2 = 5e-2
+f_Sc_diss_2 = 1e-1
 dSc_dissolved_1 = f_Sc_diss_1*np.exp(m_log)*1e-12
 dSc_dissolved_2 = f_Sc_diss_2*np.exp(m_log)*1e-12
-diss_level_1_2 = 0.95
+diss_level_1_2 = 0.9
 f_n_bond_stop = 0
+s_bond_diss = 0
 
 # time step
 factor_dt_crit = 0.6
@@ -115,12 +117,19 @@ iter_0 = 0
 
 # plan simulation
 
-
 # define wall material (no friction)
 O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
+# extent the plates
+O.bodies[0].shape.extents = Vector3(0,1.5*Dy/2,1.5*Dz/2)
+O.bodies[1].shape.extents = Vector3(0,1.5*Dy/2,1.5*Dz/2)
+O.bodies[2].shape.extents = Vector3(1.5*Dx/2,0,1.5*Dz/2)
+O.bodies[3].shape.extents = Vector3(1.5*Dx/2,0,1.5*Dz/2)
+O.bodies[4].shape.extents = Vector3(1.5*Dx/2,1.5*Dy/2,0)
+O.bodies[5].shape.extents = Vector3(1.5*Dx/2,1.5*Dy/2,0)
+# global names
 lateral_plate = O.bodies[1]
 upper_plate = O.bodies[-1]
 
@@ -172,24 +181,11 @@ def checkUnbalanced_ir_ic():
     '''
     if O.iter > 5000000 :
         O.pause()
-        stop_ic()
-    # check grains is in the box
-    L_to_erase = []
-    for b in O.bodies:
-        if isinstance(b.shape, Sphere):
-            if b.state.pos[0] < 0 or Dx < b.state.pos[0]: # x-axis
-                L_to_erase.append(b.id)
-            elif b.state.pos[1] < 0 or Dy < b.state.pos[1]: # y-axis
-                L_to_erase.append(b.id)
-            elif b.state.pos[2] < 0 or Dz < b.state.pos[2]: # z-axis
-                L_to_erase.append(b.id)
-    for id_to_erase in L_to_erase:
-        O.bodies.erase(id_to_erase)
-        print("Body",id_to_erase,'erased')
     # the rest will be run only if unbalanced is < .1 (stabilized packing)
     # Compute the ratio of mean summary force on bodies and mean force magnitude on interactions.
     if unbalancedForce() > .1:
         return
+    # increase the radius of particles
     if int(O.tags['Step ic']) < n_steps_ic :
         print('IC step '+O.tags['Step ic']+'/'+str(n_steps_ic)+' done')
         O.tags['Step ic'] = str(int(O.tags['Step ic'])+1)
@@ -198,16 +194,9 @@ def checkUnbalanced_ir_ic():
             if isinstance(b.shape, Sphere):
                 growParticle(b.id, int(O.tags['Step ic'])/n_steps_ic*L_r[i_L_r]/b.shape.radius)
                 i_L_r = i_L_r + 1
+        # update the dt as the radii change
         O.dt = factor_dt_crit * PWaveTimeStep()
         return
-    # plot the psd
-    global L_L_psd_binsSizes, L_L_psd_binsProc
-    L_L_psd_binsSizes = []
-    L_L_psd_binsProc = []
-    binsSizes, binsProc, binsSumCum = psd(bins=10)
-    L_L_psd_binsSizes.append(binsSizes)
-    L_L_psd_binsProc.append(binsProc)
-    #plotPSD()
     # characterize the ic algorithm
     global tic
     global iter_0
@@ -216,7 +205,7 @@ def checkUnbalanced_ir_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("IC Generated : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(O.iter-iter_0)+' Iterations\n')
@@ -224,7 +213,7 @@ def checkUnbalanced_ir_ic():
     simulation_report.close()
     print("\nIC Generated : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     # save
-    #O.save('save/simu_ic.yade.bz2')
+    #O.save('save/'+O.tags['d.id']+'_ic.yade.bz2')
     # next time, do not call this function anymore, but the next one instead
     iter_0 = O.iter
     checker.command = 'checkUnbalanced_load_cementation_ic()'
@@ -247,7 +236,7 @@ def controlTopWall_ic():
         upper_plate.state.pos =  (lateral_plate.state.pos[0]/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
     else :
         dF = Fz - P_cementation*lateral_plate.state.pos[0]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.00005/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -258,9 +247,11 @@ def controlTopWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_cementation_ic():
+    '''
+    Wait to reach the vertical pressure targetted for cementation.
+    '''
     if O.iter > 5000000 :
         O.pause()
-        stop_ic()
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -275,19 +266,19 @@ def checkUnbalanced_load_cementation_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
     print("\nPressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
-    # switch on friction, rolling resistance and twisting resistance between particles
+    # switch on friction, bending resistance and twisting resistance between particles
     O.materials[-1].frictionAngle = frictionAngleReal
     O.materials[-1].alphaKr = alphaKrReal
     O.materials[-1].alphaKtw = alphaKtwReal
     # for existing contacts, clear them
     O.interactions.clear()
-    # calm down particle
+    # calm down particles
     for b in O.bodies:
         if isinstance(b.shape,Sphere):
             b.state.angVel = Vector3(0,0,0)
@@ -300,9 +291,11 @@ def checkUnbalanced_load_cementation_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_param_ic():
+    '''
+    Wait to reach the equilibrium after switching on the friction and the rolling resistances.
+    '''
     if O.iter > 5000000 :
         O.pause()
-        stop_ic()
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -317,7 +310,7 @@ def checkUnbalanced_param_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Parameters applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n\n")
     simulation_report.close()
@@ -380,15 +373,20 @@ def cementation():
     # next time, do not call this function anymore, but the next one instead
     checker.command = 'checkUnbalanced_load_confinement_ic()'
     checker.iterPeriod = 200
+    # activate Young reduction
+    if considerYoungReduction :
+        O.engines = O.engines[:-1] + [PyRunner(command='YoungReduction()', iterPeriod = 100)] + [O.engines[-1]]
     # change the vertical pressure applied
     O.engines = O.engines[:-1] + [PyRunner(command='controlTopWall()', iterPeriod = 1)]
 
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_confinement_ic():
+    '''
+    Wait to reach the vertical pressure targetted for confinement.
+    '''
     if O.iter > 5000000 :
         O.pause()
-        stop_ic()
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
@@ -403,7 +401,7 @@ def checkUnbalanced_load_confinement_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (Confinement) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(n_grains)+' grains\n\n')
@@ -428,7 +426,7 @@ def controlLateralWall_ic():
         lateral_plate.state.pos =  (max([b.state.pos[0]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]), Dy/2, upper_plate.state.pos[2]/2)
     else :
         dF = Fx - k0_target*P_load*upper_plate.state.pos[2]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.00002/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -448,14 +446,18 @@ def DoNotControlLateralWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_k0_ic():
+    '''
+    Wait to reach the earth pressure coefficient targetted.
+
+    k0 = s_II/s_I, where s_I is the vertical pressure and s_II is the lateral pressure.
+    '''
     if O.iter > 5000000 :
         O.pause()
-        stop_ic()
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
-    if abs(O.forces.f(upper_plate.id)[2]  -          P_load*lateral_plate.state.pos[0]*Dy)/(          P_load*lateral_plate.state.pos[0]*Dy) > 0.005 or\
-    abs(O.forces.f(lateral_plate.id)[0]-k0_target*P_load*upper_plate.state.pos[2]*Dy)  /(k0_target*P_load*upper_plate.state.pos[2]*Dy)   > 0.005:
+    if abs(O.forces.f(upper_plate.id)[2]  - P_load*lateral_plate.state.pos[0]*Dy)/(P_load*lateral_plate.state.pos[0]*Dy) > 0.005 or\
+    abs(O.forces.f(lateral_plate.id)[0] - k0_target*P_load*upper_plate.state.pos[2]*Dy)/(k0_target*P_load*upper_plate.state.pos[2]*Dy) > 0.005:
         return
     if unbalancedForce() > unbalancedForce_criteria :
         return
@@ -467,7 +469,7 @@ def checkUnbalanced_load_k0_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (k0) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write('IC generation ends\n')
@@ -489,11 +491,8 @@ def checkUnbalanced_load_k0_ic():
     # label step
     O.tags['Current Step']='0'
     # trackers
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
-    L_unbalanced_ite = []
-    L_k0_ite = []
-    L_confinement_ite = []
-    L_count_bond = []
+    global n_try
+    n_try = 0
 
 #-------------------------------------------------------------------------------
 
@@ -502,11 +501,12 @@ def addPlotData_cementation_ic():
     Save data in plot.
     """
     # add forces applied on wall x and z
-    sz = O.forces.f(upper_plate.id)[2]/(Dx*Dy)
-    sx = O.forces.f(lateral_plate.id)[0]/(Dy*Dz)
+    sz = O.forces.f(upper_plate.id)[2]/(lateral_plate.state.pos[0]*Dy)
+    sx = O.forces.f(lateral_plate.id)[0]/(Dy*upper_plate.state.pos[2])
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                 Sx=sx, Sz=sz, conf_verified=sz/P_cementation*100, n_bond=0,\
+                 vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
 
@@ -517,9 +517,16 @@ def addPlotData_confinement_ic():
     # add forces applied on wall x and z
     sz = O.forces.f(upper_plate.id)[2]/(lateral_plate.state.pos[0]*Dy)
     sx = O.forces.f(lateral_plate.id)[0]/(Dy*upper_plate.state.pos[2])
+    # count the number the bond
+    n_bond = 0
+    for i in O.interactions:
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere):
+            if not i.phys.cohesionBroken :
+                n_bond = n_bond + 1
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(),\
-                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                 Sx=sx, Sz=sz, conf_verified=sz/P_load*100, n_bond=n_bond,\
+                 vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2], lat_strain=100*(lateral_plate.state.pos[0]-lateral_plate.state.refPos[0])/lateral_plate.state.refPos[0])
 
 #-------------------------------------------------------------------------------
 
@@ -536,7 +543,9 @@ def saveData_ic():
     L_unbalanced = []
     L_ite  = []
     L_vert_strain = []
+    L_lat_strain = []
     L_porosity = []
+    L_n_bond = []
     file = 'data/IC_'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -548,10 +557,12 @@ def saveData_ic():
             L_sigma_z.append(abs(data[i][1]))
             L_confinement.append(data[i][2])
             L_coordination.append(data[i][3])
-            L_unbalanced.append(data[i][6])
             L_ite.append(data[i][4])
-            L_porosity.append(data[i][5])
-            L_vert_strain.append(data[i][7])
+            L_lat_strain.append(data[i][5])
+            L_n_bond.append(data[i][6])
+            L_porosity.append(data[i][7])
+            L_unbalanced.append(data[i][8])
+            L_vert_strain.append(data[i][9])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(20,10),num=1)
@@ -563,22 +574,19 @@ def saveData_ic():
 
         ax2.plot(L_ite, L_unbalanced, 'b')
         ax2.set_ylabel('Unbalanced (-)', color='b')
+        ax2.set_ylim(ymin=0, ymax=2*unbalancedForce_criteria)
         ax2b = ax2.twinx()
         ax2b.plot(L_ite, L_confinement, 'r')
-        #ax2b.set_ylabel('Confinement (%)', color='r')
+        ax2b.set_ylabel('Confinement (%)', color='r')
         ax2b.set_title('Steady-state indices')
 
-        ax3.plot(L_ite, L_unbalanced, 'b')
-        #ax3.set_ylabel('Unbalanced (-)', color='b')
-        ax3.set_ylim(ymin=L_unbalanced[-1]/5, ymax=L_unbalanced[-1]*5)
-        ax3b = ax3.twinx()
-        ax3b.plot(L_ite, L_confinement, 'r')
-        ax3b.set_ylim(ymin=50, ymax=200)
-        ax3b.set_ylabel('Confinement (%)', color='r')
-        ax3b.set_title('Steady-state indices (focus)')
+        ax3.plot(L_ite, L_n_bond)
+        ax3.set_title('Number of bond (-)')
 
-        ax4.plot(L_ite, L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%)')
+        ax4.plot(L_ite, L_lat_strain, label=r'$\epsilon_x$ (%)')
+        ax4.plot(L_ite, L_vert_strain, label=r'$\epsilon_z$ (%)')
+        ax4.legend()
+        ax4.set_title('Strains (%)')
 
         ax5.plot(L_ite, L_porosity)
         ax5.set_title('Porosity (-)')
@@ -591,15 +599,50 @@ def saveData_ic():
         plt.close()
 
 #-------------------------------------------------------------------------------
-
-def stop_ic():
-    '''
-    Stop the simulation.
-    '''
-    raise ValueError('Simulation stops : too long...')
-
-#-------------------------------------------------------------------------------
 #Load
+#-------------------------------------------------------------------------------
+
+def YoungReduction():
+    '''
+    Reduce the Young modulus with the number of bond dissolved.
+
+    E = (E0-E1)*f_diss + E1
+    '''
+    # count the number of bond dissolved
+    global counter_bond, counter_bond_broken_load
+    counter_bond = 0
+    # iterate on interactions
+    for i in O.interactions:
+        # only grain-grain contact can be cemented
+        if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere) :
+            if not i.phys.cohesionBroken :
+                counter_bond = counter_bond + 1
+    counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
+    # compute the new Young modulus
+    f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
+    NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
+    # update material
+    for mat in O.materials :
+        mat.young = NewYoungModulus
+    # update the interactions
+    for inter in O.interactions :
+        if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
+            inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
+            inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
+            inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+            inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+        else : # Sphere-Wall contact
+            if isinstance(O.bodies[inter.id1].shape, Sphere):
+                grain = O.bodies[inter.id1]
+            else:
+                grain = O.bodies[inter.id2]
+            # diameter of the wall is equivalent of the diameter of the sphere
+            inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
+            inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
+            # no moment/twist for sphere-wall
+    # update time step because the Young modulus change
+    O.dt = factor_dt_crit * PWaveTimeStep()
+
 #-------------------------------------------------------------------------------
 
 def controlTopWall():
@@ -613,7 +656,7 @@ def controlTopWall():
         upper_plate.state.pos =  (lateral_plate.state.pos[0]/2, Dy/2, max([b.state.pos[2]+0.99*b.shape.radius for b in O.bodies if isinstance(b.shape, Sphere)]))
     else :
         dF = Fz - P_load*lateral_plate.state.pos[0]*Dy
-        v_plate_max = rMean*0.0002/O.dt
+        v_plate_max = rMean*0.00005/O.dt
         v_try_abs = abs(kp*dF)/O.dt
         # maximal speed is applied to top wall
         if v_try_abs < v_plate_max :
@@ -625,7 +668,7 @@ def controlTopWall():
 
 def count_bond():
     '''
-    Count the bond
+    Count the number of bond.
     '''
     counter_bond = 0
     for i in O.interactions:
@@ -638,50 +681,19 @@ def count_bond():
 
 def checkUnbalanced():
     """
-    Look for the steady state during the loading phase.
+    Look for the equilibrium during the loading phase.
     """
-    # track and plot unbalanced
-    global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
-    L_unbalanced_ite.append(unbalancedForce())
-    if O.forces.f(upper_plate.id)[2] != 0:
-        k0 = abs(O.forces.f(lateral_plate.id)[0]/(upper_plate.state.pos[2]*Dy)*(lateral_plate.state.pos[0]*Dy)/O.forces.f(upper_plate.id)[2])
-    else :
-        k0 = 0
-    L_k0_ite.append(k0)
-    L_confinement_ite.append(O.forces.f(upper_plate.id)[2]/(P_load*Dx*Dy)*100)
-    L_count_bond.append(count_bond())
-
-    #fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(16,9),num=1)
-    #ax1.plot(L_unbalanced_ite)
-    #ax1.set_title('unbalanced force (-)')
-    #ax2.plot(L_k0_ite)
-    #ax2.set_title(r'$k_0$ (-)')
-    #ax3.plot(L_confinement_ite)
-    #ax3.set_title('confinement (%)')
-    #ax4.plot(L_count_bond)
-    #ax4.set_title('Number of bond (-)')
-    #fig.savefig('plot/tracking_ite.png')
-    #plt.close()
-
-    if (unbalancedForce() < unbalancedForce_criteria) and \
-       (abs(O.forces.f(upper_plate.id)[2]-P_load*Dx*Dy) < 0.01*P_load*Dx*Dy):
-
-        # save old figure
-        #fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(16,9),num=1)
-        #ax1.plot(L_unbalanced_ite)
-        #ax1.set_title('unbalanced force (-)')
-        #ax2.plot(L_k0_ite)
-        #ax2.set_title(r'$k_0$ (-)')
-        #ax3.plot(L_confinement_ite)
-        #ax3.set_title('confinement (%)')
-        #fig.savefig('plot/tracking_prev_ite.png')
-        #plt.close()
-
+    global n_try
+    # count the number of tries
+    n_try = n_try + 1
+    # verify confinement pressure applied
+    if not abs(O.forces.f(upper_plate.id)[2]-P_load*lateral_plate.state.pos[0]*Dy) < 0.005*P_load*lateral_plate.state.pos[0]*Dy:
+        return
+    # verify unbalanced force criteria
+    # a limit is set for number of tries
+    if unbalancedForce() < unbalancedForce_criteria or n_try > 30:
         # reset trackers
-        L_unbalanced_ite = []
-        L_k0_ite = []
-        L_confinement_ite = []
-        L_count_bond = []
+        n_try = 0
 
         if counter_bond0*f_n_bond_stop < counter_bond:
             dissolve()
@@ -695,8 +707,10 @@ def dissolve():
     Dissolve bond with a constant surface reduction.
     """
     O.tags['Current Step'] = str(int(O.tags['Current Step'])+1)
+    # save at the end
+    saveData()
     # count the number of bond
-    global counter_bond, counter_bond_broken_diss, counter_bond_broken_load
+    global counter_bond, counter_bond_broken_diss, s_bond_diss
     counter_bond = 0
     counter_bond_broken = 0
     # iterate on interactions
@@ -719,36 +733,13 @@ def dissolve():
                     i.phys.cohesionBroken = True
                     i.phys.normalAdhesion = 0
                     i.phys.shearAdhesion = 0
+    # update bond surface dissolved tracker
+    if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
+        s_bond_diss = s_bond_diss + dSc_dissolved_1
+    else :
+        s_bond_diss = s_bond_diss + dSc_dissolved_2
     # update the counter of bond dissolved during the dissolution step
     counter_bond_broken_diss = counter_bond_broken_diss + counter_bond_broken
-    counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
-    # save at the end
-    saveData()
-    # update the Young Modulus (Reduce with the dissolution fraction)
-    if considerYoungReduction :
-        f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
-        NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
-        # update material
-        for mat in O.materials :
-            mat.young = NewYoungModulus
-        # update the interactions
-        for inter in O.interactions :
-            if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
-                inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
-                inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
-                inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-                inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-            else : # Sphere-Wall contact
-                if isinstance(O.bodies[inter.id1].shape, Sphere):
-                    grain = O.bodies[inter.id1]
-                else:
-                    grain = O.bodies[inter.id2]
-                # diameter of the wall is equivalent of the diameter of the sphere
-                inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
-                inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
-                # no moment/twist for sphere-wall
-    # update time step
-    O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
 
@@ -765,7 +756,7 @@ def stopLoad():
     hours = (tac-tic)//(60*60)
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Oedometric test : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.close()
@@ -774,7 +765,7 @@ def stopLoad():
     hours = (tac-tic_0)//(60*60)
     minutes = (tac-tic_0 -hours*60*60)//(60)
     seconds = int(tac-tic_0 -hours*60*60 -minutes*60)
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Simulation time : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n\n")
     simulation_report.close()
@@ -816,16 +807,12 @@ def addPlotData():
         k0 = abs(sx/sz)
     else :
         k0 = 0
-    # compute mass of the sample
-    Mass_total = 0
-    for b in O.bodies :
-        if isinstance(b.shape, Sphere) :
-            Mass_total = Mass_total + b.state.mass
     # add data
     plot.addData(i=O.iter-iter_0, porosity=porosity(), coordination=avgNumInteractions(), unbalanced=unbalancedForce(), \
                 counter_bond=counter_bond, counter_bond_broken_diss=counter_bond_broken_diss, counter_bond_broken_load=counter_bond_broken_load,\
-                 Sx=sx, Sz=sz, Z_plate=upper_plate.state.pos[2], conf_verified=sz/P_load*100, k0=k0, Mass_total=Mass_total,\
-                 w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2])
+                Sx=sx, Sz=sz, Z_plate=upper_plate.state.pos[2], conf_verified=sz/P_load*100, k0=k0,\
+                w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],
+                s_bond_diss=s_bond_diss)
 
 #-------------------------------------------------------------------------------
 
@@ -836,18 +823,14 @@ def saveData():
     addPlotData()
     plot.saveDataTxt('data/'+O.tags['d.id']+'.txt')
     # post-proccess
+    L_s_bond_diss = []
     L_k0 = []
-    L_confinement = []
-    L_unbalanced = []
-    L_coordination = []
-    L_vert_strain = []
-    L_porosity = []
-    L_mass = []
-    L_mass_diss = []
-    L_ite  = []
     L_counter_bond = []
     L_counter_bond_broken_diss = []
     L_counter_bond_broken_load = []
+    L_vert_strain = []
+    L_porosity = []
+    L_coordination = []
     file = 'data/'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
     file_read = open(file, 'r')
@@ -855,59 +838,41 @@ def saveData():
     file_read.close()
     if len(lines) >= 3:
         for i in range(len(data)):
-            L_mass.append(data[i][2])
-            L_confinement.append(data[i][4])
-            L_coordination.append(data[i][5])
-            L_counter_bond.append(data[i][6])
-            L_counter_bond_broken_diss.append(data[i][7])
-            L_counter_bond_broken_load.append(data[i][8])
-            L_ite.append(data[i][9])
-            L_k0.append(data[i][10])
-            L_porosity.append(data[i][11])
-            L_unbalanced.append(data[i][12])
+            L_coordination.append(data[i][4])
+            L_counter_bond.append(data[i][5])
+            L_counter_bond_broken_diss.append(data[i][6])
+            L_counter_bond_broken_load.append(data[i][7])
+            L_k0.append(data[i][9])
+            L_porosity.append(data[i][10])
+            L_s_bond_diss.append(data[i][11])
             L_vert_strain.append(data[i][13])
-            L_mass_diss.append(100*(L_mass[0]-L_mass[-1])/L_mass[0])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(16,9),num=1)
 
-        ax1.plot(L_k0)
-        ax1.set_title(r'$k_0$ (-) - step (-)')
+        ax1.plot(L_s_bond_diss, L_k0)
+        ax1.set_title(r'$k_0$ (-)')
 
-        ax2.plot(L_counter_bond)
-        ax2.set_title('Number of bond (-) - step (-)')
+        ax2.plot(L_s_bond_diss, L_counter_bond)
+        ax2.set_title('Number of bond (-)')
 
-        ax3.plot(L_counter_bond_broken_diss, label='during dissolution')
-        ax3.plot(L_counter_bond_broken_load, label='during loading')
-        ax3.set_title('Number of bonds broken (-) - step (-)')
+        ax3.plot(L_s_bond_diss, L_counter_bond_broken_diss, label='during dissolution')
+        ax3.plot(L_s_bond_diss, L_counter_bond_broken_load, label='during loading')
+        ax3.set_title('Number of bonds broken (-)')
         ax3.legend()
 
-        ax4.plot(L_vert_strain)
-        ax4.set_title(r'$\epsilon_v$ (%) - step (-)')
+        ax4.plot(L_s_bond_diss, L_vert_strain)
+        ax4.set_title(r'$\epsilon_z$ (%)')
 
-        ax5.plot(L_porosity)
-        ax5.set_title('Porosity (-) - step (-)')
+        ax5.plot(L_s_bond_diss, L_porosity)
+        ax5.set_title('Porosity (-)')
 
-        ax6.plot(L_coordination)
-        ax6.set_title('Coordination (-) - step (-)')
+        ax6.plot(L_s_bond_diss, L_coordination)
+        ax6.set_title('Coordination (-)')
 
+        plt.suptitle(r'Trackers - bond surface reduction (m$^2$)')
         plt.savefig('plot/'+O.tags['d.id']+'.png')
         plt.close()
-
-#-------------------------------------------------------------------------------
-
-def plotPSD():
-    """
-    This function can be called to plot the evolution of the psd.
-    """
-    plt.figure(1, figsize=(16,9))
-    for i_psd in range(len(L_L_psd_binsSizes)):
-        binsSizes = L_L_psd_binsSizes[i_psd]
-        binsProc = L_L_psd_binsProc[i_psd]
-        plt.plot(binsSizes, binsProc)
-    plt.title('Particle Size Distribution')
-    plt.savefig('plot/PSD.png')
-    plt.close()
 
 #-------------------------------------------------------------------------------
 
@@ -923,7 +888,7 @@ def whereAmI():
         print(O.tags['Current Step'],'dissolutions done :')
         print('Sample description :')
         print('\tNumber of bonds =', int(counter_bond),'(/)',int(counter_bond0))
-        print('\tepsilon_v =', round(100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],2),'(%)')
+        print('\tepsilon_z =', round(100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],2),'(%)')
         print('\tPorosity =', round(porosity(),3),'(-)')
         print('\tCoordination =', round(avgNumInteractions(),1),'(-)')
     else :
