@@ -35,7 +35,7 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e7 # Pa
+P_load = 1e8 # Pa
 kp = 1e-9 # m.N-1
 
 # Lateral wall
@@ -60,10 +60,10 @@ shearCohesion = 6.6e6 # Pa
 
 # Dissolution
 f_Sc_diss_1 = 2e-2
-f_Sc_diss_2 = 5e-2
+f_Sc_diss_2 = 1e-1
 dSc_dissolved_1 = f_Sc_diss_1*np.exp(m_log)*1e-12
 dSc_dissolved_2 = f_Sc_diss_2*np.exp(m_log)*1e-12
-diss_level_1_2 = 0.95
+diss_level_1_2 = 0.9
 f_n_bond_stop = 0
 s_bond_diss = 0
 
@@ -169,23 +169,11 @@ def checkUnbalanced_ir_ic():
     '''
     Increase particle radius until a steady-state is found.
     '''
-    # check grains is in the box
-    L_to_erase = []
-    for b in O.bodies:
-        if isinstance(b.shape, Sphere):
-            if b.state.pos[0] < 0 or Dx < b.state.pos[0]: # x-axis
-                L_to_erase.append(b.id)
-            elif b.state.pos[1] < 0 or Dy < b.state.pos[1]: # y-axis
-                L_to_erase.append(b.id)
-            elif b.state.pos[2] < 0 or Dz < b.state.pos[2]: # z-axis
-                L_to_erase.append(b.id)
-    for id_to_erase in L_to_erase:
-        O.bodies.erase(id_to_erase)
-        print("Body",id_to_erase,'erased')
     # the rest will be run only if unbalanced is < .1 (stabilized packing)
     # Compute the ratio of mean summary force on bodies and mean force magnitude on interactions.
     if unbalancedForce() > .1:
         return
+    # increase the radius of particles
     if int(O.tags['Step ic']) < n_steps_ic :
         print('IC step '+O.tags['Step ic']+'/'+str(n_steps_ic)+' done')
         O.tags['Step ic'] = str(int(O.tags['Step ic'])+1)
@@ -194,6 +182,7 @@ def checkUnbalanced_ir_ic():
             if isinstance(b.shape, Sphere):
                 growParticle(b.id, int(O.tags['Step ic'])/n_steps_ic*L_r[i_L_r]/b.shape.radius)
                 i_L_r = i_L_r + 1
+        # update the dt as the radii change
         O.dt = factor_dt_crit * PWaveTimeStep()
         return
     # plot the psd
@@ -212,7 +201,7 @@ def checkUnbalanced_ir_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("IC Generated : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(O.iter-iter_0)+' Iterations\n')
@@ -254,6 +243,9 @@ def controlTopWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_cementation_ic():
+    '''
+    Wait to reach the vertical pressure targetted for cementation.
+    '''
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -268,19 +260,19 @@ def checkUnbalanced_load_cementation_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(n_grains)+' grains\n\n')
     simulation_report.close()
     print("\nPressure (Cementation) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
-    # switch on friction, rolling resistance and twisting resistance between particles
+    # switch on friction, bending resistance and twisting resistance between particles
     O.materials[-1].frictionAngle = frictionAngleReal
     O.materials[-1].alphaKr = alphaKrReal
     O.materials[-1].alphaKtw = alphaKtwReal
     # for existing contacts, clear them
     O.interactions.clear()
-    # calm down particle
+    # calm down particles
     for b in O.bodies:
         if isinstance(b.shape,Sphere):
             b.state.angVel = Vector3(0,0,0)
@@ -293,6 +285,9 @@ def checkUnbalanced_load_cementation_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_param_ic():
+    '''
+    Wait to reach the equilibrium after switching on the friction and the rolling resistances.
+    '''
     addPlotData_cementation_ic()
     saveData_ic()
     # check the force applied
@@ -307,7 +302,7 @@ def checkUnbalanced_param_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Parameters applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n\n")
     simulation_report.close()
@@ -379,6 +374,9 @@ def cementation():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_confinement_ic():
+    '''
+    Wait to reach the vertical pressure targetted for confinement.
+    '''
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
@@ -393,7 +391,7 @@ def checkUnbalanced_load_confinement_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (Confinement) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write(str(n_grains)+' grains\n\n')
@@ -438,6 +436,11 @@ def DoNotControlLateralWall_ic():
 #-------------------------------------------------------------------------------
 
 def checkUnbalanced_load_k0_ic():
+    '''
+    Wait to reach the earth pressure coefficient targetted.
+
+    k0 = s_II/s_I, where s_I is the vertical pressure and s_II is the lateral pressure.
+    '''
     addPlotData_confinement_ic()
     saveData_ic()
     # check the force applied
@@ -454,7 +457,7 @@ def checkUnbalanced_load_k0_ic():
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
     tic = tac
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Pressure (k0) applied : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.write('IC generation ends\n')
@@ -628,7 +631,7 @@ def YoungReduction():
             inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
             inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
             # no moment/twist for sphere-wall
-    # update time step
+    # update time step because the Young modulus change
     O.dt = factor_dt_crit * PWaveTimeStep()
 
 #-------------------------------------------------------------------------------
@@ -656,7 +659,7 @@ def controlTopWall():
 
 def count_bond():
     '''
-    Count the bond
+    Count the number of bond.
     '''
     counter_bond = 0
     for i in O.interactions:
@@ -669,7 +672,7 @@ def count_bond():
 
 def checkUnbalanced():
     """
-    Look for the steady state during the loading phase.
+    Look for the equilibrium during the loading phase.
     """
     # track and plot unbalanced
     global L_unbalanced_ite, L_k0_ite, L_confinement_ite, L_count_bond
@@ -769,7 +772,7 @@ def stopLoad():
     hours = (tac-tic)//(60*60)
     minutes = (tac-tic -hours*60*60)//(60)
     seconds = int(tac-tic -hours*60*60 -minutes*60)
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Oedometric test : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n")
     simulation_report.close()
@@ -778,7 +781,7 @@ def stopLoad():
     hours = (tac-tic_0)//(60*60)
     minutes = (tac-tic_0 -hours*60*60)//(60)
     seconds = int(tac-tic_0 -hours*60*60 -minutes*60)
-    #report
+    # report
     simulation_report = open(simulation_report_name, 'a')
     simulation_report.write("Simulation time : "+str(hours)+" hours "+str(minutes)+" minutes "+str(seconds)+" seconds\n\n")
     simulation_report.close()
