@@ -41,7 +41,6 @@ n_steps_ic = 100
 kp = 1e-9 # m.N-1
 
 # Lateral wall
-k0_target = 1.5
 # same kp as top wall
 
 # cementation
