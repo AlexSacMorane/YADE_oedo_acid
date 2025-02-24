@@ -35,28 +35,30 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 1e7 # Pa
+P_load = 10e6 # Pa
 kp = 1e-9 # m.N-1
 
 # Lateral wall
-k0_target = 0.7
+k0_target = 0.2
 # same kp as top wall
 
 # cementation
 P_cementation = P_load*0.01 # Pa
-# 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70)
-# 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60)
-# 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88)
-# 13BT : E ( 860MPa), f_cemented (1.00), m_log (8.44), s_log (0.92)
-# 13MB : E (1000MPa), f_cemented (1.00), m_log (8.77), s_log (0.73)
-type_cementation = '13MB' # only for the report
-f_cemented = 1. # -
-m_log = 8.77 # -
-s_log = 0.73 # -
-YoungModulus = 1000e6
+# 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70), Ab_mean (1135e-12)
+# 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60), Ab_mean (2617e-12)
+# 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88), Ab_mean (4354e-12)
+# 13BT : E ( 860MPa), f_cemented (1.00), m_log (8.44), s_log (0.92), Ab_mean (6585e-12)
+# 13MB : E (1000MPa), f_cemented (1.00), m_log (8.77), s_log (0.73), Ab_mean (8137e-12)
+type_cementation = '11BB' # only for the report
+f_cemented = 0.98 # -
+m_log = 8.01 # -
+s_log = 0.88 # -
+YoungModulus = 760e6
 considerYoungReduction = True
 tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
+local = True # E(Ab) law activated ?
+Ab_mean = 1135e-12 # m2
 
 # Dissolution
 f_Sc_diss_1 = 2e-2
@@ -108,7 +110,11 @@ if Path('save').exists():
 os.mkdir('save')
 
 # define wall material (no friction)
-O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+if not local:
+    O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+else :
+    O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=0, density=2650, isCohesive=False, momentRotationLaw=False))
+
 # create box and grains
 O.bodies.append(aabbWalls([Vector3(0,0,0),Vector3(Dx,Dy,Dz)], thickness=0.,oversizeFactor=1))
 # a list of 6 boxes Bodies enclosing the packing, in the order minX, maxX, minY, maxY, minZ, maxZ
@@ -124,9 +130,14 @@ lateral_plate = O.bodies[1]
 upper_plate = O.bodies[-1]
 
 # define grain material
-O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
-                               isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
-                               momentRotationLaw=True, alphaKr=0, alphaKtw=0))
+if not local:
+    O.materials.append(CohFrictMat(young=YoungModulus, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+                                   isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
+                                   momentRotationLaw=True, alphaKr=0, alphaKtw=0))
+else :
+    O.materials.append(CohFrictMat(young=80e6, poisson=0.25, frictionAngle=atan(0.05), density=2650,\
+                                   isCohesive=True, normalCohesion=tensileCohesion, shearCohesion=shearCohesion,\
+                                   momentRotationLaw=True, alphaKr=0, alphaKtw=0))
 # frictionAngle, alphaKr, alphaKtw are set to 0 during IC. The real value is set after IC.
 frictionAngleReal = radians(20)
 alphaKrReal = 0.5
@@ -145,6 +156,7 @@ O.tags['Step ic'] = '1'
 
 # yade algorithm
 O.engines = [
+        PyRunner(command='grain_in_box()', iterPeriod = 1000),
         ForceResetter(),
         # sphere, wall
         InsertionSortCollider([Bo1_Sphere_Aabb(), Bo1_Box_Aabb()]),
@@ -162,6 +174,31 @@ O.engines = [
 ]
 # time step
 O.dt = factor_dt_crit * PWaveTimeStep()
+
+#-------------------------------------------------------------------------------
+
+def grain_in_box():
+    '''
+    Delete grains outside the box.
+    '''
+    #detect grain outside the box
+    L_id_to_delete = []
+    for b in O.bodies :
+        if isinstance(b.shape, Sphere):
+            #limit x \ limit y \ limit z
+            if b.state.pos[0] < O.bodies[0].state.pos[0] or O.bodies[1].state.pos[0] < b.state.pos[0] or \
+            b.state.pos[1] < O.bodies[2].state.pos[1] or O.bodies[3].state.pos[1] < b.state.pos[1] or \
+            b.state.pos[2] < O.bodies[4].state.pos[2] or O.bodies[5].state.pos[2] < b.state.pos[2] :
+                L_id_to_delete.append(b.id)
+    if L_id_to_delete != []:
+        #delete grain detected
+        for id in L_id_to_delete:
+            O.bodies.erase(id)
+        #print and report
+        simulation_report = open(simulation_report_name, 'a')
+        simulation_report.write(str(len(L_id_to_delete))+" grains erased (outside of the box)\n")
+        simulation_report.close()
+        print("\n"+str(len(L_id_to_delete))+" grains erased (outside of the box)\n")
 
 #-------------------------------------------------------------------------------
 
@@ -351,7 +388,7 @@ def cementation():
                 # creation of cohesion
                 i.phys.cohesionBroken = False
                 # determine the cohesive surface
-                cohesiveSurface = random.choices(x_L,p_x_L)[0]*1e-12 # µm2
+                cohesiveSurface = random.choices(x_L,p_x_L)[0]*1e-12 # m2
                 # set normal and shear adhesions
                 i.phys.normalAdhesion = tensileCohesion*cohesiveSurface
                 i.phys.shearAdhesion = shearCohesion*cohesiveSurface
@@ -402,6 +439,26 @@ def checkUnbalanced_load_confinement_ic():
     checker.command = 'checkUnbalanced_load_k0_ic()'
     # control lateral wall
     O.engines = O.engines + [PyRunner(command='controlLateralWall_ic()', iterPeriod = 1, label='k0_checker')]
+
+
+    # review
+    L_over_diam = []
+    for contact in O.interactions:
+        if isinstance(O.bodies[contact.id1].shape, Sphere) and isinstance(O.bodies[contact.id2].shape, Sphere):
+            b1_x = O.bodies[contact.id1].state.pos[0]
+            b1_y = O.bodies[contact.id1].state.pos[1]
+            b1_z = O.bodies[contact.id1].state.pos[2]
+            b2_x = O.bodies[contact.id2].state.pos[0]
+            b2_y = O.bodies[contact.id2].state.pos[1]
+            b2_z = O.bodies[contact.id2].state.pos[2]
+            dist = math.sqrt((b1_x-b2_x)**2+(b1_y-b2_y)**2+(b1_z-b2_z)**2)
+            over = O.bodies[contact.id1].shape.radius + O.bodies[contact.id2].shape.radius - dist
+            diam = 1/(1/(O.bodies[contact.id1].shape.radius*2)+1/(O.bodies[contact.id2].shape.radius*2))
+            
+            L_over_diam.append(over/diam)
+    m_over_diam = np.mean(L_over_diam)
+    print('Mean Overlap/Diameter', m_over_diam)
+    O.pause()
 
 #-------------------------------------------------------------------------------
 
@@ -485,6 +542,26 @@ def checkUnbalanced_load_k0_ic():
     L_k0_ite = []
     L_confinement_ite = []
     L_count_bond = []
+
+    # review
+    L_over_diam = []
+    for contact in O.interactions:
+        if isinstance(O.bodies[contact.id1].shape, Sphere) and isinstance(O.bodies[contact.id2].shape, Sphere):
+            b1_x = O.bodies[contact.id1].state.pos[0]
+            b1_y = O.bodies[contact.id1].state.pos[1]
+            b1_z = O.bodies[contact.id1].state.pos[2]
+            b2_x = O.bodies[contact.id2].state.pos[0]
+            b2_y = O.bodies[contact.id2].state.pos[1]
+            b2_z = O.bodies[contact.id2].state.pos[2]
+            dist = math.sqrt((b1_x-b2_x)**2+(b1_y-b2_y)**2+(b1_z-b2_z)**2)
+            over = O.bodies[contact.id1].shape.radius + O.bodies[contact.id2].shape.radius - dist
+            diam = 1/(1/(O.bodies[contact.id1].shape.radius*2)+1/(O.bodies[contact.id2].shape.radius*2))
+            
+            L_over_diam.append(over/diam)
+    m_over_diam = np.mean(L_over_diam)
+    print('Mean Overlap/Diameter', m_over_diam)
+    O.pause()
+
 
 #-------------------------------------------------------------------------------
 
@@ -611,27 +688,28 @@ def YoungReduction():
                 counter_bond = counter_bond + 1
     counter_bond_broken_load = (counter_bond0-counter_bond) - counter_bond_broken_diss
     # compute the new Young modulus
-    f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
-    NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
-    # update material
-    for mat in O.materials :
-        mat.young = NewYoungModulus
-    # update the interactions
-    for inter in O.interactions :
-        if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
-            inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
-            inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
-            inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-            inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
-        else : # Sphere-Wall contact
-            if isinstance(O.bodies[inter.id1].shape, Sphere):
-                grain = O.bodies[inter.id1]
-            else:
-                grain = O.bodies[inter.id2]
-            # diameter of the wall is equivalent of the diameter of the sphere
-            inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
-            inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
-            # no moment/twist for sphere-wall
+    if not local:
+        f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
+        NewYoungModulus = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
+        # update material
+        for mat in O.materials :
+            mat.young = NewYoungModulus
+        # update the interactions
+        for inter in O.interactions :
+            if isinstance(O.bodies[inter.id1].shape, Sphere) and isinstance(O.bodies[inter.id2].shape, Sphere):
+                inter.phys.kn = NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)
+                inter.phys.ks = 0.25*NewYoungModulus*(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2) # 0.25 is the Poisson ratio
+                inter.phys.kr = inter.phys.ks*alphaKrReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+                inter.phys.ktw = inter.phys.ks*alphaKtwReal*O.bodies[inter.id1].shape.radius*O.bodies[inter.id2].shape.radius
+            else : # Sphere-Wall contact
+                if isinstance(O.bodies[inter.id1].shape, Sphere):
+                    grain = O.bodies[inter.id1]
+                else:
+                    grain = O.bodies[inter.id2]
+                # diameter of the wall is equivalent of the diameter of the sphere
+                inter.phys.kn = NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2)
+                inter.phys.ks = 0.25*NewYoungModulus*(grain.shape.radius*2*grain.shape.radius*2)/(grain.shape.radius*2+grain.shape.radius*2) # 0.25 is the Poisson ratio
+                # no moment/twist for sphere-wall
     # update time step because the Young modulus change
     O.dt = factor_dt_crit * PWaveTimeStep()
 
@@ -757,6 +835,28 @@ def dissolve():
                     i.phys.cohesionBroken = True
                     i.phys.normalAdhesion = 0
                     i.phys.shearAdhesion = 0
+
+            if local:
+                if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
+                    i.phys.kn = max(i.phys.kn - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.ks = max(i.phys.ks - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.kr = max(i.phys.kr - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.ktw = max(i.phys.ktw - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    
+                else :
+                    i.phys.kn = max(i.phys.kn - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.ks = max(i.phys.ks - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.kr = max(i.phys.kr - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.ktw = max(i.phys.ktw - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
+                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+
     # update bond surface dissolved tracker
     if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
         s_bond_diss = s_bond_diss + dSc_dissolved_1
