@@ -392,6 +392,15 @@ def cementation():
                 # set normal and shear adhesions
                 i.phys.normalAdhesion = tensileCohesion*cohesiveSurface
                 i.phys.shearAdhesion = shearCohesion*cohesiveSurface
+
+                # local law E(Ab)
+                if local:
+                    localYoungModulus = (YoungModulus-80e6)*cohesiveSurface/Ab_mean + 80e6
+                    i.phys.kn = localYoungModulus*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2)
+                    i.phys.ks = 0.25*localYoungModulus*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2) # 0.25 is the Poisson ratio
+                    i.phys.kr = i.phys.ks*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
+                    i.phys.ktw = i.phys.ks*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
+         
     counter_bond0 = counter_bond
     # write in the report
     simulation_report = open(simulation_report_name, 'a')
@@ -458,7 +467,6 @@ def checkUnbalanced_load_confinement_ic():
             L_over_diam.append(over/diam)
     m_over_diam = np.mean(L_over_diam)
     print('Mean Overlap/Diameter', m_over_diam)
-    O.pause()
 
 #-------------------------------------------------------------------------------
 
@@ -560,8 +568,6 @@ def checkUnbalanced_load_k0_ic():
             L_over_diam.append(over/diam)
     m_over_diam = np.mean(L_over_diam)
     print('Mean Overlap/Diameter', m_over_diam)
-    O.pause()
-
 
 #-------------------------------------------------------------------------------
 
@@ -845,8 +851,7 @@ def dissolve():
                     i.phys.kr = max(i.phys.kr - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
                                     alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
                     i.phys.ktw = max(i.phys.ktw - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    
+                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))                
                 else :
                     i.phys.kn = max(i.phys.kn - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
                                     80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
