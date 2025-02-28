@@ -764,7 +764,7 @@ def compute_mean_Em():
         n_Em_i = 0
         for i in O.interactions:
             if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere):
-                Em_i = inter.phys.kn*(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)
+                Em_i = i.phys.kn*(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)
                 Em_mean = Em_mean + Em_i
                 n_Em_i = n_Em_i + 1
         Em_mean = Em_mean / n_Em_i
