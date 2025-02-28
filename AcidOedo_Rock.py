@@ -35,7 +35,7 @@ Dy = Dx
 n_steps_ic = 100
 
 # Top wall
-P_load = 10e6 # Pa
+P_load = 1e5 # Pa
 kp = 1e-9 # m.N-1
 
 # Lateral wall
@@ -44,16 +44,16 @@ k0_target = 0.2
 
 # cementation
 P_cementation = P_load*0.01 # Pa
-# 2T   : E ( 300MPa), f_cemented (0.13), m_log (6.79), s_log (0.70), Ab_mean (1135e-12)
-# 2MB  : E ( 320MPa), f_cemented (0.88), m_log (7.69), s_log (0.60), Ab_mean (2617e-12)
-# 11BB : E ( 760MPa), f_cemented (0.98), m_log (8.01), s_log (0.88), Ab_mean (4354e-12)
-# 13BT : E ( 860MPa), f_cemented (1.00), m_log (8.44), s_log (0.92), Ab_mean (6585e-12)
-# 13MB : E (1000MPa), f_cemented (1.00), m_log (8.77), s_log (0.73), Ab_mean (8137e-12)
-type_cementation = '11BB' # only for the report
-f_cemented = 0.98 # -
-m_log = 8.01 # -
-s_log = 0.88 # -
-YoungModulus = 760e6
+# 2T   : f_cemented (0.13), m_log (6.79), s_log (0.70), E ( 300MPa), Ab_mean (1135e-12)
+# 2MB  : f_cemented (0.88), m_log (7.69), s_log (0.60), E ( 320MPa), Ab_mean (2617e-12)
+# 11BB : f_cemented (0.98), m_log (8.01), s_log (0.88), E ( 760MPa), Ab_mean (4354e-12)
+# 13BT : f_cemented (1.00), m_log (8.44), s_log (0.92), E ( 860MPa), Ab_mean (6585e-12)
+# 13MB : f_cemented (1.00), m_log (8.77), s_log (0.73), E (1000MPa), Ab_mean (8137e-12)
+type_cementation = '2T' # only for the report
+f_cemented = 0.13 # -
+m_log = 6.79 # -
+s_log = 0.7 # -
+YoungModulus = 300e6
 considerYoungReduction = True
 tensileCohesion = 2.75e6 # Pa
 shearCohesion = 6.6e6 # Pa
@@ -73,7 +73,7 @@ s_bond_diss = 0
 factor_dt_crit = 0.6
 
 # steady-state detection
-unbalancedForce_criteria = 0.01
+unbalancedForce_criteria = 0.015
 
 # Report
 simulation_report_name = O.tags['d.id']+'_report.txt'
@@ -755,6 +755,29 @@ def count_bond():
 
 #-------------------------------------------------------------------------------
 
+def compute_mean_Em():
+    '''
+    Compute the mean Young modulus of the contacts.
+    '''
+    if local:
+        Em_mean = 0
+        n_Em_i = 0
+        for i in O.interactions:
+            if isinstance(O.bodies[i.id1].shape, Sphere) and isinstance(O.bodies[i.id2].shape, Sphere):
+                Em_i = inter.phys.kn*(O.bodies[inter.id1].shape.radius*2+O.bodies[inter.id2].shape.radius*2)/(O.bodies[inter.id1].shape.radius*2*O.bodies[inter.id2].shape.radius*2)
+                Em_mean = Em_mean + Em_i
+                n_Em_i = n_Em_i + 1
+        Em_mean = Em_mean / n_Em_i
+    else:
+        if considerYoungReduction:
+            f_bond_diss = (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0
+            Em_mean = (YoungModulus-80e6)*(1-f_bond_diss) + 80e6
+        else : 
+            Em_mean = YoungModulus
+    return Em_mean
+
+#-------------------------------------------------------------------------------
+
 def checkUnbalanced():
     """
     Look for the equilibrium during the loading phase.
@@ -794,7 +817,8 @@ def checkUnbalanced():
         return
     # verify unbalanced force criteria
     # a limit is set for number of tries
-    if unbalancedForce() < unbalancedForce_criteria or n_try > 30:
+    #if unbalancedForce() < unbalancedForce_criteria or n_try > 30:
+    if unbalancedForce() < unbalancedForce_criteria and n_try > 10:
 
         # reset trackers
         n_try = 0
@@ -846,21 +870,16 @@ def dissolve():
                 if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
                     i.phys.kn = max(i.phys.kn - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
                                     80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.ks = max(i.phys.ks - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.kr = max(i.phys.kr - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.ktw = max(i.phys.ktw - dSc_dissolved_1*(YoungModulus-80e6)/Ab_mean*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))                
+                    i.phys.ks = 0.25*i.phys.kn
+                    i.phys.kr = alphaKrReal*i.phys.ks*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
+                    i.phys.ktw = alphaKtwReal*i.phys.ks*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
                 else :
                     i.phys.kn = max(i.phys.kn - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
                                     80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.ks = max(i.phys.ks - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.kr = max(i.phys.kr - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    alphaKrReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
-                    i.phys.ktw = max(i.phys.ktw - dSc_dissolved_2*(YoungModulus-80e6)/Ab_mean*alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2), \
-                                    alphaKtwReal*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius*0.25*80e6*(O.bodies[i.id1].shape.radius*2*O.bodies[i.id2].shape.radius*2)/(O.bodies[i.id1].shape.radius*2+O.bodies[i.id2].shape.radius*2))
+                    i.phys.ks = 0.25*i.phys.kn
+                    i.phys.kr = alphaKrReal*i.phys.ks*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
+                    i.phys.ktw = alphaKtwReal*i.phys.ks*O.bodies[i.id1].shape.radius*O.bodies[i.id2].shape.radius
+                
 
     # update bond surface dissolved tracker
     if (counter_bond_broken_diss+counter_bond_broken_load)/counter_bond0 < diss_level_1_2 :
@@ -937,7 +956,7 @@ def addPlotData():
                 counter_bond=counter_bond, counter_bond_broken_diss=counter_bond_broken_diss, counter_bond_broken_load=counter_bond_broken_load,\
                 Sx=sx, Sz=sz, Z_plate=upper_plate.state.pos[2], conf_verified=sz/P_load*100, k0=k0,\
                 w=upper_plate.state.pos[2]-upper_plate.state.refPos[2], vert_strain=100*(upper_plate.state.pos[2]-upper_plate.state.refPos[2])/upper_plate.state.refPos[2],
-                s_bond_diss=s_bond_diss)
+                s_bond_diss=s_bond_diss, Em_mean=compute_mean_Em())
 
 #-------------------------------------------------------------------------------
 
@@ -954,7 +973,7 @@ def saveData():
     L_counter_bond_broken_diss = []
     L_counter_bond_broken_load = []
     L_vert_strain = []
-    L_porosity = []
+    L_Em_mean = []
     L_coordination = []
     file = 'data/'+O.tags['d.id']+'.txt'
     data = np.genfromtxt(file, skip_header=1)
@@ -963,14 +982,14 @@ def saveData():
     file_read.close()
     if len(lines) >= 3:
         for i in range(len(data)):
-            L_coordination.append(data[i][4])
-            L_counter_bond.append(data[i][5])
-            L_counter_bond_broken_diss.append(data[i][6])
-            L_counter_bond_broken_load.append(data[i][7])
-            L_k0.append(data[i][9])
-            L_porosity.append(data[i][10])
-            L_s_bond_diss.append(data[i][11])
-            L_vert_strain.append(data[i][13])
+            L_Em_mean.append(data[i][0]/(1e6))
+            L_coordination.append(data[i][5])
+            L_counter_bond.append(data[i][6])
+            L_counter_bond_broken_diss.append(data[i][7])
+            L_counter_bond_broken_load.append(data[i][8])
+            L_k0.append(data[i][10])
+            L_s_bond_diss.append(data[i][12])
+            L_vert_strain.append(data[i][14])
 
         # plot
         fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(2,3, figsize=(16,9),num=1)
@@ -989,8 +1008,8 @@ def saveData():
         ax4.plot(L_s_bond_diss, L_vert_strain)
         ax4.set_title(r'$\epsilon_z$ (%)')
 
-        ax5.plot(L_s_bond_diss, L_porosity)
-        ax5.set_title('Porosity (-)')
+        ax5.plot(L_s_bond_diss, L_Em_mean)
+        ax5.set_title('mean Young modulus (MPa)')
 
         ax6.plot(L_s_bond_diss, L_coordination)
         ax6.set_title('Coordination (-)')
